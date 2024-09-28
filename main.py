@@ -26,12 +26,19 @@ while True:
         if len(approx) == 6:
             area = cv2.contourArea(contour)
             if area > 1000: #by pixel
+                
+                #For Area of the contour
+                M = cv2.moments(contour) #m00 = pixels in contour -- m10 & m01 for center
+                if M["m00"] != 0:
+                    cx = int(M["m10"] / M["m00"])
+                    cy = int(M["m01"] / M["m00"])
+                    cv2.putText(frame, f"Center: ({cx}, {cy})", (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    cv2.circle(frame, (cx, cy), 5, (255, 0, 0), -1)
 
                 cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3) #-1 for all of it , then color , width = 3
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log.write(f"Square detected at {current_time}\n")
                 print(f"Square detected at {current_time}")
-                
 
     cv2.imshow('Test', frame)
 
