@@ -13,10 +13,13 @@ cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?
 last_center = None
 last_check_time = datetime.now()
 last_detected_time = datetime.now()
-threshold = 55  
+threshold = 50  
 missing_threshold = 10  
-min_side_length = 12
-area_limit = 180
+min_side_length = 5.5
+area_limit = 85
+distance_threshold = 50  # Maximum distance for detecting a circle near hexagons
+movement_check_interval = 5  # Seconds between movement checks
+hexagon_positions = []  # To store positions of hexagons
 
 def is_approximate_hexagon(approx):
     if len(approx) != 6:
@@ -53,66 +56,131 @@ def is_approximate_hexagon(approx):
     
     return True
 
+def is_circle(contour):
+    (x, y), radius = cv2.minEnclosingCircle(contour)
+    area = cv2.contourArea(contour)
+    circle_area = np.pi * (radius ** 2)
+    return abs(circle_area - area) / circle_area < 0.22  # Adjust tolerance as needed
+
+def detect_hexagons_and_circles(contours):
+    hexagons = []
+    circles = []
+    for contour in contours:
+        # Detect
+        epsilon = 0.022 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True) # True = Closed Lines 
+        
+        if is_approximate_hexagon(approx):
+            area = cv2.contourArea(contour)
+            if area > area_limit: # by pixel
+                hexagons.append(contour)
+                
+        elif is_circle(contour):
+            circles.append(contour)
+    
+    return hexagons, circles
+
+def calculate_distance(p1, p2):
+    return np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+def find_nearby_circles(hexagons, circles, distance_threshold):
+    nearby_circles = []
+    for circle in circles:
+        M = cv2.moments(circle)
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            circle_center = (cx, cy)
+
+            for hexagon in hexagons:
+                M_hex = cv2.moments(hexagon)
+                if M_hex["m00"] != 0:
+                    hx = int(M_hex["m10"] / M_hex["m00"])
+                    hy = int(M_hex["m01"] / M_hex["m00"])
+                    hexagon_center = (hx, hy)
+
+                    distance = calculate_distance(circle_center, hexagon_center)
+                    if distance < distance_threshold:
+                        nearby_circles.append(circle)
+                        break
+
+    return nearby_circles
+
+def check_movement(new_positions, old_positions, threshold):
+    for new_pos in new_positions:
+        moved = True
+        for old_pos in old_positions:
+            if calculate_distance(new_pos, old_pos) < threshold:
+                moved = False
+                break
+        if moved:
+            return True
+    return False
+
 while True:
     ret, frame = cam.read()
     if not ret:
         break
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Define the region
+    height, width = frame.shape[:2]
+    middle_x = width // 2
+    middle_y = height // 2
 
-    blurred = cv2.GaussianBlur(gray, (3, 3), 6)
+    region_start_x = middle_x +390
+    region_end_x = middle_x + 550 
+    region_start_y = middle_y -40
+    region_end_y = middle_y + 70
 
+    region = frame[region_start_y:region_end_y, region_start_x:region_end_x]
+
+    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 5)
     #median = cv2.medianBlur(blurred, 3)
-
     #bilateral = cv2.bilateralFilter(median, 3, 50, 50)
-
     thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
 
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    detected = False  
+    detected_hexagons, detected_circles = detect_hexagons_and_circles(contours)
+    nearby_circles = find_nearby_circles(detected_hexagons, detected_circles, distance_threshold)
 
-    for contour in contours:
-        # Detect
-        epsilon = 0.0175 * cv2.arcLength(contour, True) ### ATTENTION: For 1080p: 0.015    For 720p: 0.017 ###
-        approx = cv2.approxPolyDP(contour, epsilon, True) # True = Closed Lines    
+    current_positions = []
+    for hexagon in detected_hexagons:
+        M = cv2.moments(hexagon) #m00 = pixels in contour -- m10 & m01 for center
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            current_positions.append((cx + region_start_x, cy + region_start_y))  # Adjust center position for the full image
+            cv2.putText(frame, f"Hexagon Center: ({cx}, {cy})", (cx + region_start_x, cy + region_start_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+            cv2.circle(frame, (cx + region_start_x, cy + region_start_y), 4, (255, 0, 0), -1)
+            #cv2.drawContours(frame, [hexagon], -1, (0, 255, 0), 3)
 
-        if is_approximate_hexagon(approx):
-            area = cv2.contourArea(contour)
-            if area > area_limit:  # by pixel
+            last_detected_time = datetime.now()
 
-                # For Area of the contour
-                M = cv2.moments(contour) #m00 = pixels in contour -- m10 & m01 for center
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    cv2.putText(frame, f"Center: ({cx}, {cy})", (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    cv2.circle(frame, (cx, cy), 5, (255, 0, 0), -1)
+    if datetime.now() - last_check_time > timedelta(seconds=movement_check_interval):
+        if hexagon_positions and check_movement(current_positions, hexagon_positions, threshold):
+            print("Shape Moved!")
+        
+        hexagon_positions = current_positions
+        last_check_time = datetime.now()
 
-                    current_time = datetime.now()
-                    if current_time - last_check_time >= timedelta(seconds=5):
-                        if last_center is not None: #if it has been detected even for ones
-                            distance = np.sqrt((cx - last_center[0])**2 + (cy - last_center[1])**2)
-                            if distance > threshold:
-                                movement_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-                                log.write(f"Shape moved at {movement_time} from {last_center} to ({cx}, {cy}), Distance: {distance}\n")
-                                print(f"Shape moved at {movement_time} from {last_center} to ({cx}, {cy}), Distance: {distance}")
-                                pic_num += 1
-                                cv2.imwrite(f"Picture_moved{pic_num}.jpg", frame)
+    for circle in nearby_circles:
+        M = cv2.moments(circle)
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            circle_center = (cx + region_start_x, cy + region_start_y)
 
-                        last_center = (cx, cy)
-                        last_check_time = current_time
+            cv2.putText(frame, f"Circle Center: ({cx}, {cy})", (cx + region_start_x, cy + region_start_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.circle(frame, (cx + region_start_x, cy + region_start_y), 2, (0, 255, 0), -1)
+            #cv2.drawContours(frame, [circle], -1, (0, 0, 255), 3)
 
-                    detected = True
-                    last_detected_time = current_time
-
-                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
-
-    if not detected and (datetime.now() - last_detected_time).seconds > missing_threshold:
+    if not detected_hexagons and (datetime.now() - last_detected_time).seconds > missing_threshold:
         cv2.putText(frame, "ALARM: Shape not detected!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
         print("ALARM: Shape not detected!")
 
-    frame = cv2.resize(frame, (1360, 750))
+    frame = cv2.resize(frame, (1300, 700))
     cv2.imshow('Test', frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
