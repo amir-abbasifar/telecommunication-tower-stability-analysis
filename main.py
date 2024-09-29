@@ -56,19 +56,84 @@ def is_circle(contour):
     circle_area = np.pi * (radius ** 2)
     return abs(circle_area - area) / circle_area < 0.22 # Adjust tolerance as needed 
 
-def detect_hexagons_and_circles(contours):
+def is_pentagon(contour):
+    epsilon = 0.02 * cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, epsilon, True)
+    
+    if len(approx) == 5:
+        angles = []
+        for i in range(5):
+            p1 = approx[i][0]
+            p2 = approx[(i + 1) % 5][0]
+            p3 = approx[(i + 2) % 5][0]
+            
+            v1 = p1 - p2
+            v2 = p3 - p2
+            
+            angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
+            angles.append(angle)
+        
+        avg_angle = np.mean(angles)
+        if all(abs(angle - avg_angle) < 10 for angle in angles) and 100 <= avg_angle <= 115:
+            return True
+    return False
+
+def is_star(contour, num_vertices=10, angle_threshold=10, side_length_threshold=0.2):
+    epsilon = 0.030 * cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, epsilon, True)
+    
+    if len(approx) != num_vertices:
+        return False
+    
+    def angle(pt1, pt2, pt3):
+        vec1 = pt1 - pt2
+        vec2 = pt3 - pt2
+        cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+        angle = np.arccos(cos_angle) * 180 / np.pi
+        return angle
+
+    angles = []
+    side_lengths = []
+    
+    for i in range(num_vertices):
+        p1 = approx[i][0]
+        p2 = approx[(i + 1) % num_vertices][0]
+        p3 = approx[(i + 2) % num_vertices][0]
+
+        side_length = np.linalg.norm(p1 - p2)
+        side_lengths.append(side_length)
+
+        angles.append(angle(p1, p2, p3))
+
+    # for angle in angles:
+    #     if (angle < 235 - angle_threshold and angle > 235 + angle_threshold) or (angle < 10 - angle_threshold and angle > 10 + angle_threshold):
+    #         return False
+
+    max_side = max(side_lengths)
+    min_side = min(side_lengths)
+    
+    if max_side / min_side > 1 + side_length_threshold:
+        return False
+
+    return True
+
+def detect_shapes(contours):
     hexagons = []
     circles = []
+    stars = []
     for contour in contours:
         epsilon = 0.022 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon, True) # True = Closed Lines
+        approx = cv2.approxPolyDP(contour, epsilon, True)
         if is_approximate_hexagon(approx):
             area = cv2.contourArea(contour)
             if area > area_limit:
                 hexagons.append(contour)
+        elif is_star(contour):
+            stars.append(contour)
         elif is_circle(contour):
             circles.append(contour)
-    return hexagons, circles
+    return hexagons, circles, stars
 
 def calculate_distance(p1, p2):
     return np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
@@ -132,7 +197,7 @@ class VideoWindow(QWidget):
 
         self.add_button = QPushButton("Add Region", self)
         self.add_button.setGeometry(700, 280, 100, 40)
-        self.add_button.setEnabled(False) 
+        self.add_button.setEnabled(False)
         self.add_button.clicked.connect(self.add_region)
 
         self.delete_button = QPushButton("Delete Region", self)
@@ -156,10 +221,10 @@ class VideoWindow(QWidget):
         self.hexagon_positions = []
         self.rect_ready = False
 
-        self.region_last_check_times = {} 
-        self.region_hexagon_positions = {} 
-        self.region_last_detected_times = {} 
-        self.region_last_alarm_times = {} 
+        self.region_last_check_times = {}
+        self.region_hexagon_positions = {}
+        self.region_last_detected_times = {}
+        self.region_last_alarm_times = {}
 
         self.is_started = False
 
@@ -167,7 +232,7 @@ class VideoWindow(QWidget):
     def start_video(self):
         self.is_started = True
         self.timer.start(30)
-        self.add_button.setEnabled(True) 
+        self.add_button.setEnabled(True)
         self.delete_button.setEnabled(True)
 
     def stop_video(self):
@@ -252,7 +317,7 @@ class VideoWindow(QWidget):
                 thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                detected_hexagons, detected_circles = detect_hexagons_and_circles(contours)
+                detected_hexagons, detected_circles, detected_stars = detect_shapes(contours)
                 nearby_circles = find_nearby_circles(detected_hexagons, detected_circles, distance_threshold)
 
                 current_positions = []
@@ -262,7 +327,7 @@ class VideoWindow(QWidget):
                         cx = int(M["m10"] / M["m00"])
                         cy = int(M["m01"] / M["m00"])
                         current_positions.append((cx, cy))
-                        cv2.circle(roi, (cx, cy), 4, (255, 0, 0), -1)
+                        cv2.circle(roi, (cx, cy), 3, (0, 0, 255), -1)
 
                 if region not in self.region_last_check_times:
                     self.region_last_check_times[region] = datetime.now()
@@ -290,6 +355,14 @@ class VideoWindow(QWidget):
                         cy = int(M["m01"] / M["m00"])
                         circle_center = (cx, cy)
                         cv2.circle(roi, (cx, cy), 2, (0, 255, 0), -1)
+
+                for star in detected_stars:
+                    M = cv2.moments(star)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        star_center = (cx, cy)
+                        cv2.circle(roi, (cx, cy), 2, (255, 255, 0), -1)
 
                 if not detected_hexagons:
                     if (datetime.now() - self.region_last_detected_times[region]).seconds > missing_threshold:
