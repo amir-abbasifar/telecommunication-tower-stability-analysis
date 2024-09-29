@@ -169,12 +169,19 @@ class VideoWindow(QWidget):
 
 ############################################################################
 
+        self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
+        self.epsilon_checkbox.setChecked(False)
+        self.epsilon_checkbox.setGeometry(1520, 400, 100, 40)
+        self.epsilon_checkbox.stateChanged.connect(self.toggle_epsilon_slider)
+        
+
         self.epsilon_value = 0.04
         
         self.epsilon_label = QLabel(f'Epsilon: {self.epsilon_value:.3f}', self)
         self.epsilon_label.setGeometry(1400, 430, 100, 40)
         
         self.epsilon_slider = QSlider(Qt.Horizontal, self)
+        self.epsilon_slider.setEnabled(False)
         self.epsilon_slider.setGeometry(1400, 400, 100, 40)
         self.epsilon_slider.setMinimum(1)
         self.epsilon_slider.setMaximum(100)
@@ -198,7 +205,7 @@ class VideoWindow(QWidget):
         self.last_detected_time = datetime.now()
         self.rect_ready = False
 
-        self.region_last_check_times = {} 
+        self.region_last_check_times = {}
         self.region_hexagon_positions = {}
         self.region_last_detected_times = {}
         self.region_last_alarm_times = {}
@@ -215,6 +222,27 @@ class VideoWindow(QWidget):
         self.epsilon_value = float(float(self.epsilon_slider.value()) / 1000.0)
         self.epsilon_label.setText(f'Epsilon: {self.epsilon_value:.3f}')
 
+
+    def adjust_epsilon(self, hexagon_count):
+        current_epsilon = self.epsilon_value
+
+        if hexagon_count < 8 and current_epsilon > 0.049:
+            current_epsilon = 0.035
+
+        elif hexagon_count < 7:
+            current_epsilon += 0.0005
+        
+        # elif hexagon_count > 9:
+        #     current_epsilon -= 0.001
+
+        self.epsilon_value = current_epsilon
+        self.epsilon_label.setText(f'Epsilon: {self.epsilon_value:.3f}')
+
+    def toggle_epsilon_slider(self, state):
+        if state == QtCore.Qt.Checked:
+            self.epsilon_slider.setEnabled(True)
+        else:
+            self.epsilon_slider.setEnabled(False)
 
 
     def closeEvent(self, event):
@@ -351,9 +379,15 @@ class VideoWindow(QWidget):
                 hexagons_unique_centers = count_unique_positions(hexagons_last_centers)
                 stars_unique_centers = count_unique_positions(stars_last_centers)
 
+
                 current_time = time.time()
                 if region not in self.region_last_count_time:
                     self.region_last_count_time[region] = current_time
+
+                if not self.epsilon_checkbox.isChecked():
+                    self.adjust_epsilon(len(detected_hexagons))
+
+
 
                 if current_time - self.region_last_count_time[region] >= 3:
                     time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
