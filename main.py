@@ -8,17 +8,17 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit
 from PyQt5.QtGui import QImage, QPixmap
 
-#cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
-cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
+#cam = cv2.VideoCapture(0)
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 last_center = None
 last_check_time = datetime.now()
 last_detected_time = datetime.now()
-threshold = 1  
+threshold = 1
 missing_threshold = 10  
-min_side_length = 5.5
-area_limit = 85
+min_side_length = 2
+area_limit = 50
 distance_threshold = 120
 drawing = False
 ix, iy = -1, -1
@@ -43,14 +43,14 @@ def is_approximate_hexagon(approx):
         angle = np.arccos(cos_angle) * 180 / np.pi
         angles.append(angle)
     for angle in angles:
-        if angle < 55 or angle > 155:
+        if angle < 40 or angle > 170:
             return False
     for length in side_lengths:
         if length < min_side_length:
             return False
     return True
 
-def is_star(contour, num_vertices=10, angle_threshold=10, side_length_threshold=0.4):
+def is_star(contour, num_vertices=10, angle_threshold=10, side_length_threshold=0.8):
     epsilon = 0.030 * cv2.arcLength(contour, True)
     approx = cv2.approxPolyDP(contour, epsilon, True)
     
@@ -94,7 +94,7 @@ def detect_shapes(contours):
     hexagons = []
     stars = []
     for contour in contours:
-        epsilon = 0.022 * cv2.arcLength(contour, True)
+        epsilon = 0.04 * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
         if is_approximate_hexagon(approx):
             area = cv2.contourArea(contour)
@@ -134,21 +134,21 @@ class VideoWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Shape Detector")
-        self.setGeometry(100, 100, 1000, 800)
+        self.setGeometry(20, 50, 1920, 1080)
 
         self.video_label = QLabel(self)
-        self.video_label.setGeometry(20, 20, 640, 480)
+        self.video_label.setGeometry(0, 0, 1300, 700)
 
         self.start_button = QPushButton("Start", self)
-        self.start_button.setGeometry(700, 100, 100, 40)
+        self.start_button.setGeometry(1400, 100, 100, 40)
         self.start_button.clicked.connect(self.start_video)
 
         self.stop_button = QPushButton("Stop", self)
-        self.stop_button.setGeometry(700, 160, 100, 40)
+        self.stop_button.setGeometry(1400, 160, 100, 40)
         self.stop_button.clicked.connect(self.stop_video)
 
         self.exit_button = QPushButton("Exit", self)
-        self.exit_button.setGeometry(700, 220, 100, 40)
+        self.exit_button.setGeometry(1400, 220, 100, 40)
         self.exit_button.clicked.connect(self.close)
 
         self.regions = []
@@ -157,17 +157,17 @@ class VideoWindow(QWidget):
 
 
         self.add_button = QPushButton("Add Region", self)
-        self.add_button.setGeometry(700, 280, 100, 40)
+        self.add_button.setGeometry(1400, 280, 100, 40)
         self.add_button.setEnabled(False)
         self.add_button.clicked.connect(self.add_region)
 
         self.delete_button = QPushButton("Delete Region", self)
-        self.delete_button.setGeometry(700, 340, 100, 40)
+        self.delete_button.setGeometry(1400, 340, 100, 40)
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self.delete_region)
 
         self.info_box = QTextEdit(self)
-        self.info_box.setGeometry(20, 520, 760, 250)
+        self.info_box.setGeometry(20, 700, 760, 250)
         self.info_box.setReadOnly(True)
 
         self.timer = QTimer(self)
@@ -191,6 +191,10 @@ class VideoWindow(QWidget):
 
         self.log_df = pd.DataFrame(columns=["timestamp", "region", "hexagons", "stars"])
 
+
+        self.pic_num = 0
+
+
     def closeEvent(self, event):
         time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.log_df.to_csv(f"{time_now}.csv", index=False)
@@ -212,8 +216,11 @@ class VideoWindow(QWidget):
     def mousePressEvent(self, event):
         if self.is_started:
             if event.button() == Qt.LeftButton:
+                x_ratio = cam_width / self.video_label.width()
+                y_ratio = cam_height / self.video_label.height()
+                
                 self.drawing = True
-                self.ix, self.iy = event.x(), event.y()
+                self.ix, self.iy = int(event.x() * x_ratio), int(event.y() * y_ratio)
                 self.rx1, self.ry1 = self.ix, self.iy
                 self.rx2, self.ry2 = self.ix, self.iy
                 self.delete_button.setEnabled(False)
@@ -222,25 +229,33 @@ class VideoWindow(QWidget):
     def mouseMoveEvent(self, event):
         if self.is_started:
             if self.drawing:
-                self.rx2, self.ry2 = event.x(), event.y()
+                x_ratio = cam_width / self.video_label.width()
+                y_ratio = cam_height / self.video_label.height()
+
+                self.rx2, self.ry2 = int(event.x() * x_ratio), int(event.y() * y_ratio)
                 self.rect_ready = True
                 self.update_frame()
 
     def mouseReleaseEvent(self, event):
         if self.is_started:
             if event.button() == Qt.LeftButton:
+                x_ratio = cam_width / self.video_label.width()
+                y_ratio = cam_height / self.video_label.height()
+
                 self.drawing = False
-                self.rx2, self.ry2 = event.x(), event.y()
+                self.rx2, self.ry2 = int(event.x() * x_ratio), int(event.y() * y_ratio)
                 self.rect_ready = True
                 self.delete_button.setEnabled(True)
                 self.update_frame()
 
     def add_region(self):
-        if self.rx1 == self.rx2 or self.ry1 == self.ry2:
-            self.info_box.append("No region selected!")
-            return
+        # if self.rx1 == self.rx2 or self.ry1 == self.ry2:
+        #     self.info_box.append("No region selected!")
+        #     return
 
-        new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
+        #new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
+        new_region = (1176,103,1260,163)
+
         
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and 
@@ -318,11 +333,13 @@ class VideoWindow(QWidget):
                 if region not in self.region_last_count_time:
                     self.region_last_count_time[region] = current_time
 
-                if current_time - self.region_last_count_time[region] >= 5:
+                if current_time - self.region_last_count_time[region] >= 3:
                     time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     new_log = {"timestamp": time_now, "region": region, "hexagons": hexagons_unique_centers, "stars": stars_unique_centers}
                     self.log_df = self.log_df._append(new_log, ignore_index=True)
                     self.info_box.append(f"Region {region}: Hexagons: {hexagons_unique_centers}, Stars: {stars_unique_centers}")
+                    cv2.imwrite(f"Picture_moved{self.pic_num}.jpg", frame)
+                    self.pic_num = self.pic_num + 1
                     self.region_last_count_time[region] = current_time
 
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -337,6 +354,7 @@ class VideoWindow(QWidget):
 
 
             qformat = QImage.Format_RGB888
+            frame = cv2.resize(frame, (1300, 700))
             out_image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], qformat)
             out_image = out_image.rgbSwapped()
             self.video_label.setPixmap(QPixmap.fromImage(out_image))
