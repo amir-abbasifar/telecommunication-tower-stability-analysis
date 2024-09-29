@@ -8,8 +8,8 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
 
-cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
-#cam = cv2.VideoCapture(0)
+#cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
+cam = cv2.VideoCapture(0)
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
@@ -43,49 +43,8 @@ def is_approximate_hexagon(approx):
             return False
     return True
 
-def is_star(contour, num_vertices=10, angle_threshold=10, side_length_threshold=0.8):
-    epsilon = 0.030 * cv2.arcLength(contour, True)
-    approx = cv2.approxPolyDP(contour, epsilon, True)
-    
-    if len(approx) != num_vertices:
-        return False
-    
-    def angle(pt1, pt2, pt3):
-        vec1 = pt1 - pt2
-        vec2 = pt3 - pt2
-        cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)
-        angle = np.arccos(cos_angle) * 180 / np.pi
-        return angle
-
-    angles = []
-    side_lengths = []
-    
-    for i in range(num_vertices):
-        p1 = approx[i][0]
-        p2 = approx[(i + 1) % num_vertices][0]
-        p3 = approx[(i + 2) % num_vertices][0]
-
-        side_length = np.linalg.norm(p1 - p2)
-        side_lengths.append(side_length)
-
-        angles.append(angle(p1, p2, p3))
-
-    # for angle in angles:
-    #     if (angle < 235 - angle_threshold and angle > 235 + angle_threshold) or (angle < 10 - angle_threshold and angle > 10 + angle_threshold):
-    #         return False
-
-    max_side = max(side_lengths)
-    min_side = min(side_lengths)
-    
-    if max_side / min_side > 1 + side_length_threshold:
-        return False
-
-    return True
-
 def detect_shapes(contours, epsilon_val):
     hexagons = []
-    stars = []
     for contour in contours:
         epsilon = epsilon_val * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
@@ -93,9 +52,7 @@ def detect_shapes(contours, epsilon_val):
             area = cv2.contourArea(contour)
             if area > area_limit:
                 hexagons.append(contour)
-        elif is_star(contour):
-            stars.append(contour)
-    return hexagons, stars
+    return hexagons
 
 def calculate_distance(p1, p2):
     return np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
@@ -128,94 +85,75 @@ class SettingsWindow(QWidget):
         super().__init__()
         self.parent = parent
         self.setWindowTitle("Settings")
-        self.setGeometry(500, 200, 400, 600)
+        self.setGeometry(500, 200, 400, 535)
 
         QLabel("Slow Scan Time:", self).setGeometry(20, 20, 150, 30)
         self.scan_time_slow_input = QLineEdit(self)
-        self.scan_time_slow_input.setGeometry(210, 20, 100, 30)
+        self.scan_time_slow_input.setGeometry(260, 20, 100, 30)
         self.scan_time_slow_input.setText(str(self.parent.scan_time_slow))
 
         QLabel("Fast Scan Time:", self).setGeometry(20, 60, 150, 30)
         self.scan_time_fast_input = QLineEdit(self)
-        self.scan_time_fast_input.setGeometry(210, 60, 100, 30)
+        self.scan_time_fast_input.setGeometry(260, 60, 100, 30)
         self.scan_time_fast_input.setText(str(self.parent.scan_time_fast))
 
-        QLabel("Medium Scan Time:", self).setGeometry(20, 100, 150, 30)
-        self.scan_time_medium_input = QLineEdit(self)
-        self.scan_time_medium_input.setGeometry(210, 100, 100, 30)
-        self.scan_time_medium_input.setText(str(self.parent.scan_time_medium))
-
-        QLabel("Number of Fast Scans:", self).setGeometry(20, 140, 150, 30)
+        QLabel("Number of Fast Scans:", self).setGeometry(20, 100, 150, 30)
         self.number_of_fast_scan_input = QLineEdit(self)
-        self.number_of_fast_scan_input.setGeometry(210, 140, 100, 30)
+        self.number_of_fast_scan_input.setGeometry(260, 100, 100, 30)
         self.number_of_fast_scan_input.setText(str(self.parent.number_of_fast_scan))
 
-        QLabel("Number of Medium Scans:", self).setGeometry(20, 180, 150, 30)
-        self.number_of_medium_scan_input = QLineEdit(self)
-        self.number_of_medium_scan_input.setGeometry(210, 180, 100, 30)
-        self.number_of_medium_scan_input.setText(str(self.parent.number_of_medium_scan))
-
-        QLabel("Flag Limit:", self).setGeometry(20, 220, 150, 30)
+        QLabel("Flag Limit:", self).setGeometry(20, 140, 150, 30)
         self.flag_limit_input = QLineEdit(self)
-        self.flag_limit_input.setGeometry(210, 220, 100, 30)
+        self.flag_limit_input.setGeometry(260, 140, 100, 30)
         self.flag_limit_input.setText(str(self.parent.flag_for_find_true_hexagons_limit))
 
-        QLabel("Missing Time: ", self).setGeometry(20, 260, 200, 30)
+        QLabel("Missing Time: ", self).setGeometry(20, 180, 200, 30)
         self.missing_time_input = QLineEdit(self)
-        self.missing_time_input.setGeometry(210, 260, 100, 30)
+        self.missing_time_input.setGeometry(260, 180, 100, 30)
         self.missing_time_input.setText(str(self.parent.missing_hexagon_threshold))
 
-        QLabel("Movement Sensitivity:", self).setGeometry(20, 300, 200, 30)
+        QLabel("Movement Sensitivity:", self).setGeometry(20, 220, 200, 30)
         self.threshold_of_movement_sensitivity_input = QLineEdit(self)
-        self.threshold_of_movement_sensitivity_input.setGeometry(210, 300, 100, 30)
+        self.threshold_of_movement_sensitivity_input.setGeometry(260, 220, 100, 30)
         self.threshold_of_movement_sensitivity_input.setText(str(self.parent.threshold_of_movement_sensitivity))
 
-        QLabel("Yellow Sensitivity:", self).setGeometry(20, 340, 200, 30)
-        self.threshold_of_yellow_sensitivity_input = QLineEdit(self)
-        self.threshold_of_yellow_sensitivity_input.setGeometry(210, 340, 100, 30)
-        self.threshold_of_yellow_sensitivity_input.setText(str(self.parent.threshold_of_yellow_sensitivity))
+        QLabel("Wind Sensitivity:", self).setGeometry(20, 260, 200, 30)
+        self.threshold_of_wind_sensitivity_input = QLineEdit(self)
+        self.threshold_of_wind_sensitivity_input.setGeometry(260, 260, 100, 30)
+        self.threshold_of_wind_sensitivity_input.setText(str(self.parent.threshold_of_wind_sensitivity))
 
-        QLabel("Red Sensitivity:", self).setGeometry(20, 380, 200, 30)
+        QLabel("Red Sensitivity:", self).setGeometry(20, 300, 200, 30)
         self.threshold_of_red_sensitivity_input = QLineEdit(self)
-        self.threshold_of_red_sensitivity_input.setGeometry(210, 380, 100, 30)
+        self.threshold_of_red_sensitivity_input.setGeometry(260, 300, 100, 30)
         self.threshold_of_red_sensitivity_input.setText(str(self.parent.threshold_of_red_sensitivity))
 
-        QLabel("Number of Hexagons:", self).setGeometry(20, 420, 200, 30)
+        QLabel("Number of Hexagons:", self).setGeometry(20, 340, 200, 30)
         self.number_of_hexagons_input = QLineEdit(self)
-        self.number_of_hexagons_input.setGeometry(210, 420, 100, 30)
+        self.number_of_hexagons_input.setGeometry(260, 340, 100, 30)
         self.number_of_hexagons_input.setText(str(self.parent.number_of_hexagons))
 
-        self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
-        self.epsilon_checkbox.setGeometry(20, 460, 100, 40)
-        self.epsilon_checkbox.setChecked(True)
-        self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
-        self.epsilon_checkbox.stateChanged.connect(self.toggle_epsilon_slider)
-
         self.epsilon_label = QLabel(f'Epsilon: {self.parent.epsilon_value:.3f}', self)
-        self.epsilon_label.setGeometry(130, 460, 100, 40)
+        self.epsilon_label.setGeometry(80, 400, 100, 40)
 
         self.epsilon_slider = QSlider(Qt.Horizontal, self)
-        self.epsilon_slider.setEnabled(self.epsilon_checkbox.isChecked())
-        self.epsilon_slider.setGeometry(230, 460, 100, 40)
+        self.epsilon_slider.setEnabled(True)
+        self.epsilon_slider.setGeometry(190, 400, 100, 40)
         self.epsilon_slider.setMinimum(1)
         self.epsilon_slider.setMaximum(100)
         self.epsilon_slider.setValue(int(self.parent.epsilon_value * 1000))
         self.epsilon_slider.valueChanged.connect(self.update_epsilon)
 
         self.ok_button = QPushButton("OK", self)
-        self.ok_button.setGeometry(260, 520, 100, 40)
+        self.ok_button.setGeometry(260, 470, 100, 40)
         self.ok_button.clicked.connect(self.apply_settings)
 
         self.Reset_button = QPushButton("Reset", self)
-        self.Reset_button.setGeometry(150, 520, 100, 40)
+        self.Reset_button.setGeometry(150, 470, 100, 40)
         self.Reset_button.clicked.connect(self.reset_settings)
 
         self.cancel_button = QPushButton("Cancel", self)
-        self.cancel_button.setGeometry(40, 520, 100, 40)
+        self.cancel_button.setGeometry(40, 470, 100, 40)
         self.cancel_button.clicked.connect(self.cancel_settings)
-
-    def toggle_epsilon_slider(self, state):
-        self.epsilon_slider.setEnabled(state == Qt.Checked)
 
     def update_epsilon(self, value):
         epsilon_value = value / 1000.0
@@ -227,13 +165,11 @@ class SettingsWindow(QWidget):
     def reset_settings(self):
             self.scan_time_slow_input.setText(str(self.parent.default_scan_time_slow))
             self.scan_time_fast_input.setText(str(self.parent.default_scan_time_fast))
-            self.scan_time_medium_input.setText(str(self.parent.default_scan_time_medium))
             self.number_of_fast_scan_input.setText(str(self.parent.default_number_of_fast_scan))
-            self.number_of_medium_scan_input.setText(str(self.parent.default_number_of_medium_scan))
             self.flag_limit_input.setText(str(self.parent.default_flag_for_find_true_hexagons_limit))
             self.missing_time_input.setText(str(self.parent.default_missing_hexagon_threshold))##
             self.threshold_of_movement_sensitivity_input.setText(str(self.parent.default_threshold_of_movement_sensitivity))
-            self.threshold_of_yellow_sensitivity_input.setText(str(self.parent.default_threshold_of_yellow_sensitivity))
+            self.threshold_of_wind_sensitivity_input.setText(str(self.parent.default_threshold_of_wind_sensitivity))
             self.threshold_of_red_sensitivity_input.setText(str(self.parent.default_threshold_of_red_sensitivity))
             self.number_of_hexagons_input.setText(str(self.parent.default_number_of_hexagons))
 
@@ -244,17 +180,14 @@ class SettingsWindow(QWidget):
     def apply_settings(self):
         self.parent.scan_time_slow = float(self.scan_time_slow_input.text())
         self.parent.scan_time_fast = float(self.scan_time_fast_input.text())
-        self.parent.scan_time_medium = float(self.scan_time_medium_input.text())
         self.parent.number_of_fast_scan = int(self.number_of_fast_scan_input.text())
-        self.parent.number_of_medium_scan = int(self.number_of_medium_scan_input.text())
         self.parent.flag_for_find_true_hexagons_limit = int(self.flag_limit_input.text())
         self.parent.missing_hexagon_threshold = int(self.missing_time_input.text())
         self.parent.threshold_of_movement_sensitivity = int(self.threshold_of_movement_sensitivity_input.text())
-        self.parent.threshold_of_yellow_sensitivity = int(self.threshold_of_yellow_sensitivity_input.text())
+        self.parent.threshold_of_wind_sensitivity = int(self.threshold_of_wind_sensitivity_input.text())
         self.parent.threshold_of_red_sensitivity = int(self.threshold_of_red_sensitivity_input.text())
         self.parent.number_of_hexagons = int(self.number_of_hexagons_input.text())
 
-        self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
         self.parent.epsilon_value = self.epsilon_slider.value() / 1000.0
         
         self.close()
@@ -283,9 +216,6 @@ class VideoWindow(QWidget):
 
         self.regions = []
 
-        self.last_alarm_time = datetime.now()
-
-
         self.add_button = QPushButton("Add Region", self)
         self.add_button.setGeometry(1400, 280, 100, 40)
         self.add_button.setEnabled(False)
@@ -295,7 +225,6 @@ class VideoWindow(QWidget):
         self.delete_button.setGeometry(1400, 340, 100, 40)
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self.delete_region)
-
 
         self.info_box = QTextEdit(self)
         self.info_box.setGeometry(20, 700, 760, 250)
@@ -320,10 +249,7 @@ class VideoWindow(QWidget):
 
         self.is_started = False
 
-        self.log_df = pd.DataFrame(columns=["timestamp", "region", "hexagons", "stars"])
-
-
-        self.pic_num = 0
+        #self.log_df = pd.DataFrame(columns=["timestamp", "region", "hexagons"])
 
         self.scan_time = 1
 
@@ -335,10 +261,10 @@ class VideoWindow(QWidget):
         self.status_label.setGeometry(1450, 500, 50, 50)
         self.update_status("white")
 
-        self.yellow_status_label = QLabel("Wind Status:", self)
-        self.yellow_status_label.setGeometry(1400, 540, 100, 100)
-        self.yellow_status_label = QLabel(self)
-        self.yellow_status_label.setGeometry(1490, 575, 30, 30)
+        self.wind_status_label = QLabel("Wind Status:", self)
+        self.wind_status_label.setGeometry(1400, 540, 100, 100)
+        self.wind_status_label = QLabel(self)
+        self.wind_status_label.setGeometry(1490, 575, 30, 30)
         self.wind_status("white")
 
 
@@ -348,35 +274,30 @@ class VideoWindow(QWidget):
         self.hexagon_true_unique_centers = []
         self.counter_flag = 0
         self.flag_counter_green = 0
-        self.flag_counter_yellow = 0
         self.flag_counter_red = 0
         self.red_warnings = 0
-        self.yellow_warnings = 0
         self.orange_warnings = 0
+        self.wind_warnings = 0
         ##
         self.default_scan_time_slow = 3
         self.default_scan_time_fast = 0.3
-        self.default_scan_time_medium = 0.3
         self.default_number_of_fast_scan = 20
-        self.default_number_of_medium_scan = 25
         self.default_flag_for_find_true_hexagons_limit = 4
         self.default_epsilon_value = 0.035
         self.default_missing_hexagon_threshold = 5
         self.default_threshold_of_movement_sensitivity = 10
-        self.default_threshold_of_yellow_sensitivity = 7
+        self.default_threshold_of_wind_sensitivity = 7
         self.default_threshold_of_red_sensitivity = 20
         self.default_number_of_hexagons = 4
 
         self.scan_time_slow = self.default_scan_time_slow
         self.scan_time_fast = self.default_scan_time_fast
-        self.scan_time_medium = self.default_scan_time_medium
         self.number_of_fast_scan = self.default_number_of_fast_scan
-        self.number_of_medium_scan = self.default_number_of_medium_scan
         self.flag_for_find_true_hexagons_limit = self.default_flag_for_find_true_hexagons_limit
         self.epsilon_value = self.default_epsilon_value
         self.missing_hexagon_threshold = self.default_missing_hexagon_threshold
         self.threshold_of_movement_sensitivity = self.default_threshold_of_movement_sensitivity
-        self.threshold_of_yellow_sensitivity = self.default_threshold_of_yellow_sensitivity
+        self.threshold_of_wind_sensitivity = self.default_threshold_of_wind_sensitivity
         self.threshold_of_red_sensitivity = self.default_threshold_of_red_sensitivity
         self.number_of_hexagons = self.default_number_of_hexagons
         ##
@@ -394,18 +315,14 @@ class VideoWindow(QWidget):
 
         self.red_warning_lable = QLabel(f"Red: {self.red_warnings}", self)
         self.red_warning_lable.setGeometry(1480, 640, 80, 80)
-        self.yellow_warning_lable = QLabel(f"Yellow: {self.yellow_warnings}", self)
-        self.yellow_warning_lable.setGeometry(1480, 660, 80, 80)
         self.orange_warning_lable = QLabel(f"Orange: {self.orange_warnings}", self)
-        self.orange_warning_lable.setGeometry(1480, 680, 80, 80)
+        self.orange_warning_lable.setGeometry(1480, 660, 80, 80)
+        self.wind_warning_lable = QLabel(f"Wind: {self.wind_warnings}", self)
+        self.wind_warning_lable.setGeometry(1480, 680, 80, 80)
         
         self.settings_button = QPushButton("Settings", self)
         self.settings_button.setGeometry(1400, 400, 100, 40)
         self.settings_button.clicked.connect(self.open_settings)
-
-
-        # self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
-        # self.epsilon_checkbox.setChecked(False)
 
     def open_settings(self):
         self.settings_window = SettingsWindow(self)
@@ -435,17 +352,14 @@ class VideoWindow(QWidget):
 
     def wind_status(self, color):
         if color == "white":
-            self.yellow_status_label.setStyleSheet("background-color: white; border-radius: 15;")
+            self.wind_status_label.setStyleSheet("background-color: white; border-radius: 15;")
         elif color == "yellow":
-            self.yellow_status_label.setStyleSheet("background-color: yellow; border-radius: 15;")
+            self.wind_status_label.setStyleSheet("background-color: yellow; border-radius: 15;")
 
-
-
-    def closeEvent(self, event):
-        time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_df.to_csv(f"{time_now}.csv", index=False)
-        event.accept()
-
+    # def closeEvent(self, event):
+    #     time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    #     self.log_df.to_csv(f"{time_now}.csv", index=False)
+    #     event.accept()
 
     def start_video(self):
         self.is_started = True
@@ -501,8 +415,7 @@ class VideoWindow(QWidget):
 
         new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
         #new_region = (1176,103,1260,163)
-
-        
+ 
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and 
                 abs(new_region[1] - region[1]) < 5 and 
@@ -528,11 +441,11 @@ class VideoWindow(QWidget):
             self.state = "init"
             self.counter_flag = 0
             self.red_warnings = 0
-            self.yellow_warnings = 0
+            self.wind_warnings = 0
             self.orange_warnings = 0
-            self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
-            self.red_warning_lable.setText(f"Red: {self.yellow_warnings}")
-            self.orange_warning_lable.setText(f"Orange: {self.yellow_warnings}")
+            self.wind_warning_lable.setText(f"Wind: {self.wind_warnings}")
+            self.red_warning_lable.setText(f"Red: {self.red_warnings}")
+            self.orange_warning_lable.setText(f"Orange: {self.orange_warnings}")
             self.update_frame()
         
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
@@ -566,11 +479,12 @@ class VideoWindow(QWidget):
                 roi = frame[y1:y2, x1:x2]
 
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                #equalized = cv2.equalizeHist(gray) #For Night
                 blurred = cv2.GaussianBlur(gray, (3, 3), 5)
                 thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-                detected_hexagons, detected_stars = detect_shapes(contours, self.epsilon_value)
+                detected_hexagons = detect_shapes(contours, self.epsilon_value)
 
                 if region not in self.region_last_check_times:
                     self.region_last_check_times[region] = datetime.now()
@@ -582,7 +496,6 @@ class VideoWindow(QWidget):
                     self.region_hexagon_positions[region] = []
 
                 hexagons_last_centers = []
-                stars_last_centers = []
 
                 for hexagon in detected_hexagons:
                     M = cv2.moments(hexagon)
@@ -592,30 +505,17 @@ class VideoWindow(QWidget):
                         hexagons_last_centers.append((cx, cy))
                         cv2.circle(roi, (cx, cy), 3, (0, 0, 255), -1)
 
-                # for star in detected_stars:
-                #     M = cv2.moments(star)
-                #     if M["m00"] != 0:
-                #         cx = int(M["m10"] / M["m00"])
-                #         cy = int(M["m01"] / M["m00"])
-                #         stars_last_centers.append((cx, cy))
-                #         cv2.circle(roi, (cx, cy), 2, (255, 255, 0), -1)
-
                 hexagons_unique_centers = count_unique_positions(hexagons_last_centers)
-                stars_unique_centers = count_unique_positions(stars_last_centers)
-
 
                 current_time = time.time()
                 if region not in self.region_last_count_time:
                     self.region_last_count_time[region] = current_time
 
-                # if not self.epsilon_checkbox.isChecked():
-                #     self.adjust_epsilon(len(detected_hexagons))
-
 ########################################################################################################                    
 
                 if current_time - self.region_last_count_time[region] >= self.scan_time:
                     if current_time - self.region_last_count_time[region] >= self.scan_time:
-                        if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity) and not self.state == "fast_scan" and not self.state == "init":
+                        if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_wind_sensitivity) and not self.state == "fast_scan" and not self.state == "init":
                             self.wind_status("yellow")
                         elif not self.state == "fast_scan":
                             self.wind_status("white")
@@ -672,42 +572,24 @@ class VideoWindow(QWidget):
 
                         self.check_missing_hexagons(current_time, hexagons_unique_centers)
 
-
-
                     elif self.state == "decision":
-                        if max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_red:
-                            self.flag_counter_yellow = 0
+                        if max(self.flag_counter_green, self.flag_counter_red) == self.flag_counter_red:
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.update_status("red")
                             self.state = "red_calibration"
                             self.red_warnings += 1
                             self.red_warning_lable.setText(f"Red: {self.red_warnings}")
+                            self.info_box.append("Warning: Hexagons moved.")
                             self.info_box.append("State: Red")
 
-                        elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_green:
-                            self.flag_counter_yellow = 0
+                        elif max(self.flag_counter_green, self.flag_counter_red) == self.flag_counter_green:
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.state = "slow_scan"
                             if not self.warning_red_is_enabled:
                                 self.update_status("green")
                             self.info_box.append("State: Slow Scan")
-
-                        # elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_yellow:
-                        #     self.flag_counter_yellow = 0
-                        #     self.flag_counter_red = 0
-                        #     self.flag_counter_green = 0
-                        #     self.state = "yellow"
-                        #     self.wind_status("yellow")
-                        #     self.yellow_warnings += 1
-                        #     self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
-                        #     self.info_box.append("Warning: Unstable weather conditions.")
-
-                    # elif self.state == "yellow":
-                    #     self.info_box.append("State: Medium Scan")
-                    #     self.state = "medium_scan"
-                    #     self.scan_time = self.scan_time_medium
 
                     elif self.state == "orange":
                         if len(hexagons_unique_centers) == 0:
@@ -727,68 +609,12 @@ class VideoWindow(QWidget):
                                 if not self.warning_red_is_enabled:
                                     self.update_status("green")
                                 self.info_box.append("State: Slow Scan")
-                            # elif self.state == "medium_scan":
-                            #     self.wind_status("yellow")
-                            #     self.info_box.append("State: Yellow")
-                    
-                    # elif self.state == "pre_black":
-                    #     if self.fall_warning == 2:
-                    #         self.info_box.append("Warning: Possibility of Falling.")
-                    #     self.update_status("crimson")
-                    #     if len(hexagons_unique_centers) == 0:
-                    #         if self.fall_warning == 3:
-                    #             self.info_box.append("Search the entire image.")
-                    #             region = (0, cam_width, 0, cam_height)
-                    #         elif self.fall_warning > 3:
-
-
-
-                            
-                    #         self.fall_warning += 1
-                    #     elif len(hexagons_unique_centers) < len(self.hexagon_true_unique_centers) / 2:
-                    #         self.fall_warning = 0
-                    #     else:
-                    #         self.fall_warning = 0
-                    #         self.hexagon_missing_timer_start = None
-                    #         self.hexagon_missing_warning_shown = False
-                    #         self.state = self.ex_state
-
-                    #         if self.state == "slow_scan":
-                    #             if not self.warning_red_is_enabled:
-                    #                 self.update_status("green")
-                    #             self.info_box.append("State: Slow Scan")
-                    #         elif self.state == "medium_scan":
-                    #             if not self.warning_red_is_enabled:
-                    #                 self.update_status("yellow")
-                    #             self.info_box.append("State: Yellow")
-
-
 
                     elif self.state == "black":
                         self.scan_time = self.scan_time_slow ##
                         self.info_box.append("!!! Fall Warning !!!")
                         #cv2.putText(frame, "!!! Fall Warning !!!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
                         self.update_status("black")
-                        
-                    # elif self.state == "medium_scan":
-                    #     self.ex_state = self.state
-                    #     if not self.counter_flag == self.number_of_medium_scan:
-                    #         if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
-                    #                 self.flag_counter_red += 1
-                    #         else:
-                    #             if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
-                    #                 self.flag_counter_yellow += 1
-                    #             else:
-                    #                 self.flag_counter_green += 1
-                                
-                    #         self.counter_flag += 1
-
-                    #     else:
-                    #         self.info_box.append("State: Decision")
-                    #         self.state = "decision"
-                    #         self.counter_flag = 0
-
-                    #     self.check_missing_hexagons(current_time, hexagons_unique_centers)
                     
                     elif self.state == "red_calibration":
                         self.warning_red_is_enabled = True
@@ -800,22 +626,10 @@ class VideoWindow(QWidget):
                     self.region_last_count_time[region] = current_time
                     self.hexagons_last_unique_centers = hexagons_unique_centers
 
-
 ##################################################################################################
-
-
-                # if current_time - self.region_last_count_time[region] >= self.scan_time:
-                #     time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                #     new_log = {"timestamp": time_now, "region": region, "hexagons": len(hexagons_unique_centers), "stars": len(stars_unique_centers)}
-                #     self.log_df = self.log_df._append(new_log, ignore_index=True)
-                #     self.info_box.append(f"Region {region}: Hexagons: {len(hexagons_unique_centers)}, Stars: {len(stars_unique_centers)}")
-                #     cv2.imwrite(f"Picture_moved{self.pic_num}.jpg", frame)
-                #     self.pic_num = self.pic_num + 1
-                #     self.region_last_count_time[region] = current_time
 
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.putText(frame, f"({x1}, {y1}, {x2}, {y2})", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
-
                         
             if self.drawing or (self.rx1 != 0 and self.ry1 != 0 and self.rx2 != 0 and self.ry2 != 0):
                 cv2.rectangle(frame, (self.rx1, self.ry1), (self.rx2, self.ry2), (0, 255, 0), 2)
@@ -823,18 +637,11 @@ class VideoWindow(QWidget):
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(frame, text, (self.rx1, self.ry1 - 10), font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
-
             qformat = QImage.Format_RGB888
             frame = cv2.resize(frame, (1300, 700))
             out_image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], qformat)
             out_image = out_image.rgbSwapped()
             self.video_label.setPixmap(QPixmap.fromImage(out_image))
-
-    def is_within_regions(self, x, y):
-        for region in self.regions:
-            if region[0] <= x <= region[2] and region[1] <= y <= region[3]:
-                return True
-        return False
 
 if __name__ == '__main__':
     import sys
