@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider
+from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
 
 #cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
@@ -15,9 +15,9 @@ cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 last_center = None
 last_check_time = datetime.now()
 last_detected_time = datetime.now()
-threshold = 10
 missing_threshold = 10  
 min_side_length = 2
+threshold_of_fine_unique_pos = 10
 area_limit = 50
 distance_threshold = 120
 drawing = False
@@ -124,12 +124,119 @@ def count_unique_positions(centers):
     for center in centers:
         is_unique = True
         for unique_center in unique_centers:
-            if np.linalg.norm(np.array(center) - np.array(unique_center)) < threshold:
+            if np.linalg.norm(np.array(center) - np.array(unique_center)) < threshold_of_fine_unique_pos:
                 is_unique = False
                 break
         if is_unique:
             unique_centers.append(center)
     return unique_centers
+
+class SettingsWindow(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.setWindowTitle("Settings")
+        self.setGeometry(500, 200, 400, 460)
+
+        QLabel("Slow Scan Time:", self).setGeometry(20, 20, 150, 30)
+        self.scan_time_slow_input = QLineEdit(self)
+        self.scan_time_slow_input.setGeometry(210, 20, 100, 30)
+        self.scan_time_slow_input.setText(str(self.parent.scan_time_slow))
+
+        QLabel("Fast Scan Time:", self).setGeometry(20, 60, 150, 30)
+        self.scan_time_fast_input = QLineEdit(self)
+        self.scan_time_fast_input.setGeometry(210, 60, 100, 30)
+        self.scan_time_fast_input.setText(str(self.parent.scan_time_fast))
+
+        QLabel("Medium Scan Time:", self).setGeometry(20, 100, 150, 30)
+        self.scan_time_medium_input = QLineEdit(self)
+        self.scan_time_medium_input.setGeometry(210, 100, 100, 30)
+        self.scan_time_medium_input.setText(str(self.parent.scan_time_medium))
+
+        QLabel("Number of Fast Scans:", self).setGeometry(20, 140, 150, 30)
+        self.number_of_fast_scan_input = QLineEdit(self)
+        self.number_of_fast_scan_input.setGeometry(210, 140, 100, 30)
+        self.number_of_fast_scan_input.setText(str(self.parent.number_of_fast_scan))
+
+        QLabel("Number of Medium Scans:", self).setGeometry(20, 180, 150, 30)
+        self.number_of_medium_scan_input = QLineEdit(self)
+        self.number_of_medium_scan_input.setGeometry(210, 180, 100, 30)
+        self.number_of_medium_scan_input.setText(str(self.parent.number_of_medium_scan))
+
+        QLabel("Flag Limit:", self).setGeometry(20, 220, 150, 30)
+        self.flag_limit_input = QLineEdit(self)
+        self.flag_limit_input.setGeometry(210, 220, 100, 30)
+        self.flag_limit_input.setText(str(self.parent.flag_for_find_true_hexagons_limit))
+
+        QLabel("threshold of check movement:", self).setGeometry(20, 260, 1760, 30)
+        self.threshold_of_check_movement_input = QLineEdit(self)
+        self.threshold_of_check_movement_input.setGeometry(210, 260, 100, 30)
+        self.threshold_of_check_movement_input.setText(str(self.parent.threshold_of_check_movement))
+
+        self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
+        self.epsilon_checkbox.setGeometry(20, 300, 100, 40)
+        self.epsilon_checkbox.setChecked(True)
+        self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
+        self.epsilon_checkbox.stateChanged.connect(self.toggle_epsilon_slider)
+
+        self.epsilon_label = QLabel(f'Epsilon: {self.parent.epsilon_value:.3f}', self)
+        self.epsilon_label.setGeometry(130, 300, 100, 40)
+
+        self.epsilon_slider = QSlider(Qt.Horizontal, self)
+        self.epsilon_slider.setEnabled(self.epsilon_checkbox.isChecked())
+        self.epsilon_slider.setGeometry(230, 300, 100, 40)
+        self.epsilon_slider.setMinimum(1)
+        self.epsilon_slider.setMaximum(100)
+        self.epsilon_slider.setValue(int(self.parent.epsilon_value * 1000))
+        self.epsilon_slider.valueChanged.connect(self.update_epsilon)
+
+        self.ok_button = QPushButton("OK", self)
+        self.ok_button.setGeometry(260, 370, 100, 40)
+        self.ok_button.clicked.connect(self.apply_settings)
+
+        self.Reset_button = QPushButton("Reset", self)
+        self.Reset_button.setGeometry(150, 370, 100, 40)
+        self.Reset_button.clicked.connect(self.reset_settings)
+
+        self.cancel_button = QPushButton("Cancel", self)
+        self.cancel_button.setGeometry(40, 370, 100, 40)
+        self.cancel_button.clicked.connect(self.cancel_settings)
+
+    def toggle_epsilon_slider(self, state):
+        self.epsilon_slider.setEnabled(state == Qt.Checked)
+
+    def update_epsilon(self, value):
+        epsilon_value = value / 1000.0
+        self.epsilon_label.setText(f'Epsilon: {epsilon_value:.3f}')
+
+    def cancel_settings(self):
+        self.close()
+
+    def reset_settings(self):
+            self.scan_time_slow_input.setText(str(self.parent.default_scan_time_slow))
+            self.scan_time_fast_input.setText(str(self.parent.default_scan_time_fast))
+            self.scan_time_medium_input.setText(str(self.parent.default_scan_time_medium))
+            self.number_of_fast_scan_input.setText(str(self.parent.default_number_of_fast_scan))
+            self.number_of_medium_scan_input.setText(str(self.parent.default_number_of_medium_scan))
+            self.flag_limit_input.setText(str(self.parent.default_flag_for_find_true_hexagons_limit))
+            self.threshold_of_check_movement_input.setText(str(self.parent.default_threshold_of_check_movement))
+            self.epsilon_slider.setValue(int(self.parent.default_epsilon_value * 1000))
+            self.epsilon_slider.valueChanged.connect(self.update_epsilon)
+            
+            
+    def apply_settings(self):
+        self.parent.scan_time_slow = float(self.scan_time_slow_input.text())
+        self.parent.scan_time_fast = float(self.scan_time_fast_input.text())
+        self.parent.scan_time_medium = float(self.scan_time_medium_input.text())
+        self.parent.number_of_fast_scan = int(self.number_of_fast_scan_input.text())
+        self.parent.number_of_medium_scan = int(self.number_of_medium_scan_input.text())
+        self.parent.flag_for_find_true_hexagons_limit = int(self.flag_limit_input.text())
+        self.parent.threshold_of_check_movement = int(self.threshold_of_check_movement_input.text())
+
+        self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
+        self.parent.epsilon_value = self.epsilon_slider.value() / 1000.0
+        
+        self.close()
 
 class VideoWindow(QWidget):
     def __init__(self):
@@ -167,29 +274,6 @@ class VideoWindow(QWidget):
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self.delete_region)
 
-
-############################################################################
-
-        self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
-        self.epsilon_checkbox.setChecked(False)
-        self.epsilon_checkbox.setGeometry(1520, 400, 100, 40)
-        self.epsilon_checkbox.stateChanged.connect(self.toggle_epsilon_slider)
-        
-
-        self.epsilon_value = 0.04
-        
-        self.epsilon_label = QLabel(f'Epsilon: {self.epsilon_value:.3f}', self)
-        self.epsilon_label.setGeometry(1400, 430, 100, 40)
-        
-        self.epsilon_slider = QSlider(Qt.Horizontal, self)
-        self.epsilon_slider.setEnabled(False)
-        self.epsilon_slider.setGeometry(1400, 400, 100, 40)
-        self.epsilon_slider.setMinimum(1)
-        self.epsilon_slider.setMaximum(100)
-        self.epsilon_slider.setValue(int(self.epsilon_value * 1000))
-        self.epsilon_slider.valueChanged.connect(self.update_epsilon)
-
-#############################################################################
 
         self.info_box = QTextEdit(self)
         self.info_box.setGeometry(20, 700, 760, 250)
@@ -230,7 +314,6 @@ class VideoWindow(QWidget):
         self.update_status("white")
 
 
-
         self.state = "init"
         self.flag_for_find_true_hexagons = 0
         self.hexagons_last_unique_centers = []
@@ -239,34 +322,47 @@ class VideoWindow(QWidget):
         self.flag_counter_green = 0
         self.flag_counter_yellow = 0
         self.flag_counter_red = 0
+        self.red_warnings = 0
+        self.yellow_warnings = 0
+        ##
+        self.default_scan_time_slow = 3
+        self.default_scan_time_fast = 0.1
+        self.default_scan_time_medium = 0.3
+        self.default_number_of_fast_scan = 50
+        self.default_number_of_medium_scan = 50
+        self.default_flag_for_find_true_hexagons_limit = 3
+        self.default_threshold_of_check_movement = 10
+        self.default_epsilon_value = 0.04
+        self.scan_time_slow = self.default_scan_time_slow
+        self.scan_time_fast = self.default_scan_time_fast
+        self.scan_time_medium = self.default_scan_time_medium
+        self.number_of_fast_scan = self.default_number_of_fast_scan
+        self.number_of_medium_scan = self.default_number_of_medium_scan
+        self.flag_for_find_true_hexagons_limit = self.default_flag_for_find_true_hexagons_limit
+        self.threshold_of_check_movement = self.default_threshold_of_check_movement
+        self.epsilon_value = self.default_epsilon_value
+        ##
 
-        self.scan_time_slow = 3
-        self.scan_time_fast = 0.1
-        self.scan_time_medium = 0.3
-        self.number_of_fast_scan = 50
-        self.number_of_medium_scan = 50
-        self.flag_for_find_true_hexagons_limit = 3
-        ######################################## state            
+        self.warning_label = QLabel("Warnings:", self)
+        self.warning_label.setGeometry(1400, 560, 70, 70)
 
-    def update_epsilon(self):
-        self.epsilon_value = float(float(self.epsilon_slider.value()) / 1000.0)
-        self.epsilon_label.setText(f'Epsilon: {self.epsilon_value:.3f}')
-
-
-    def adjust_epsilon(self, hexagon_count):
-        current_epsilon = self.epsilon_value
-
-        if hexagon_count < 8 and current_epsilon > 0.049:
-            current_epsilon = 0.035
-
-        elif hexagon_count < 7:
-            current_epsilon += 0.0005
+        self.red_warning_lable = QLabel(f"Red: {self.red_warnings}", self)
+        self.red_warning_lable.setGeometry(1480, 580, 80, 80)
+        self.yellow_warning_lable = QLabel(f"Yellow: {self.yellow_warnings}", self)
+        self.yellow_warning_lable.setGeometry(1480, 600, 80, 80)
         
-        # elif hexagon_count > 9:
-        #     current_epsilon -= 0.001
+        
+        self.settings_button = QPushButton("Settings", self)
+        self.settings_button.setGeometry(1400, 400, 100, 40)
+        self.settings_button.clicked.connect(self.open_settings)
 
-        self.epsilon_value = current_epsilon
-        self.epsilon_label.setText(f'Epsilon: {self.epsilon_value:.3f}')
+
+        # self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
+        # self.epsilon_checkbox.setChecked(False)
+
+    def open_settings(self):
+        self.settings_window = SettingsWindow(self)
+        self.settings_window.show()
 
     def toggle_epsilon_slider(self, state):
         if state == QtCore.Qt.Checked:
@@ -346,6 +442,7 @@ class VideoWindow(QWidget):
         new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
         #new_region = (1176,103,1260,163)
 
+        
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and 
                 abs(new_region[1] - region[1]) < 5 and 
@@ -369,6 +466,7 @@ class VideoWindow(QWidget):
             self.rect_ready = False
             self.update_status("white")
             self.state = "init"
+            self.counter_flag = 0
             self.update_frame()
         
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
@@ -425,8 +523,8 @@ class VideoWindow(QWidget):
                 if region not in self.region_last_count_time:
                     self.region_last_count_time[region] = current_time
 
-                if not self.epsilon_checkbox.isChecked():
-                    self.adjust_epsilon(len(detected_hexagons))
+                # if not self.epsilon_checkbox.isChecked():
+                #     self.adjust_epsilon(len(detected_hexagons))
 
 ########################################################################################################                    
 
@@ -444,7 +542,7 @@ class VideoWindow(QWidget):
                             self.counter_flag += 1
 
                         if self.flag_for_find_true_hexagons < self.flag_for_find_true_hexagons_limit:
-                            if self.hexagons_last_unique_centers and not check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, threshold):
+                            if self.hexagons_last_unique_centers and not check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
                                 self.flag_for_find_true_hexagons += 1
                         else:
                             self.state = "slow_scan"
@@ -453,7 +551,7 @@ class VideoWindow(QWidget):
 
                     elif self.state == "slow_scan":
                         self.scan_time = self.scan_time_slow
-                        if not check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, threshold):
+                        if not check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
                             pass
                         else:
                             self.state = "fast_scan"
@@ -462,8 +560,8 @@ class VideoWindow(QWidget):
 
                     elif self.state == "fast_scan":
                         if not self.counter_flag == self.number_of_fast_scan:
-                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, threshold):
-                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, threshold):
+                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
+                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
                                     self.flag_counter_yellow += 1
                                 else:
                                     self.flag_counter_red += 1
@@ -474,7 +572,7 @@ class VideoWindow(QWidget):
                         else:
                             self.state = "decision"
                             self.counter_flag = 0
-                            self.info_box.append("Decision Decision Decision Decision Decision Decision Decision")
+                            self.info_box.append("Decision Started.")
 
 
                     elif self.state == "decision":
@@ -484,28 +582,33 @@ class VideoWindow(QWidget):
                             self.flag_counter_green = 0
                             self.state = "slow_scan"
                             self.update_status("green")
+                            self.info_box.append("Decision Done: Green.")
                         elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_red:
                             self.flag_counter_yellow = 0
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.update_status("red")
                             self.state = "red_calibration"
+                            self.red_warnings += 1
+                            self.info_box.append("Decision Done: Red.")
                         elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_yellow:
                             self.flag_counter_yellow = 0
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.state = "yellow"
                             self.update_status("yellow")
+                            self.yellow_warnings += 1
                             self.info_box.append("Warning: Unstable weather conditions.")
 
                     elif self.state == "yellow":
                         self.state = "medium_scan"
+                        self.info_box.append("Switching yellow state to medium scan state.")
                         self.scan_time = self.scan_time_medium
                     
                     elif self.state == "medium_scan":
                         if not self.counter_flag == self.number_of_medium_scan:
-                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, threshold):
-                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, threshold):
+                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
+                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
                                     self.flag_counter_yellow += 1
                                 else:
                                     self.flag_counter_red += 1
@@ -519,7 +622,7 @@ class VideoWindow(QWidget):
                     
                     elif self.state == "red_calibration":
                         self.state = "slow_scan"
-                        self.hexagon_true_unique_centers = hexagons_unique_centers
+                        self.hexagon_true_unique_centers = hexagons_unique_centers##################################Warning#########################
 
                     self.region_last_count_time[region] = current_time
                     self.hexagons_last_unique_centers = hexagons_unique_centers
