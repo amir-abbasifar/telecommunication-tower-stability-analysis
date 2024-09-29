@@ -8,10 +8,13 @@ log = open("shape_movement_log.txt", mode="a")
 pic_num = int(0)
 
 cam = cv2.VideoCapture(0)
+#cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
 
 last_center = None
 last_check_time = datetime.now()
+last_detected_time = datetime.now()
 threshold = 20
+missing_threshold = 10 
 
 while True:
     ret, frame = cam.read()
@@ -24,18 +27,20 @@ while True:
 
     edged = cv2.Canny(blurred, 50, 150)
 
-    contours, hierarchy = cv2.findContours(edged, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    detected = False  
 
     for contour in contours:
         # Detect
-        epsilon = 0.018 * cv2.arcLength(contour, True) # True = Closed Lines
+        epsilon = 0.02 * cv2.arcLength(contour, True) # True = Closed Lines
         approx = cv2.approxPolyDP(contour, epsilon, True) # R
 
-        if len(approx) == 6:  
+        if len(approx) == 6: 
             area = cv2.contourArea(contour)
-            if area > 1000:  #by pixel
-                
-                #For Area of the contour
+            if area > 1000: #by pixel
+
+                #For Area of the contour 
                 M = cv2.moments(contour) #m00 = pixels in contour -- m10 & m01 for center
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
@@ -57,8 +62,11 @@ while True:
                         last_center = (cx, cy)
                         last_check_time = current_time
 
-                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3) #-1 for all of it , then color , width = 3
+                    detected = True
+                    last_detected_time = current_time
 
+                cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
+                
                 # current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 # log.write(f"Square detected at {current_time}\n")
                 # print(approx)
@@ -70,6 +78,10 @@ while True:
                 # if not os.path.isdir(mypath):
                 #     tarikh = datetime.now().strftime("%Y-%m-%d")
                 #     os.makedirs(dir)
+
+    if not detected and (datetime.now() - last_detected_time).seconds > missing_threshold:
+        cv2.putText(frame, "ALARM: Shape not detected!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+        print("ALARM: Shape not detected!")
 
     cv2.imshow('Test', frame)
 
