@@ -1,8 +1,11 @@
 import cv2
 import numpy as np
+import os
 from datetime import datetime
 
 log = open("square_detection_log.txt", mode="a")
+
+pic_num = int(0)
 
 cam = cv2.VideoCapture(0)
 
@@ -13,13 +16,15 @@ while True:
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    edged = cv2.Canny(gray, 50, 150)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    contours, hierarchy_par_child = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE) ##############cv2.RETR_LIST
+    edged = cv2.Canny(blurred, 50, 150)
+
+    contours, hierarchy_par_child = cv2.findContours(edged, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE) ##############cv2.RETR_LIST
 
     for contour in contours:
         # Detect
-        epsilon = 0.02 * cv2.arcLength(contour, True) # True = Closed Lines
+        epsilon = 0.018 * cv2.arcLength(contour, True) # True = Closed Lines
         approx = cv2.approxPolyDP(contour, epsilon, True) # R
 
 
@@ -38,7 +43,17 @@ while True:
                 cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3) #-1 for all of it , then color , width = 3
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log.write(f"Square detected at {current_time}\n")
+                print(approx)
                 print(f"Square detected at {current_time}")
+
+                pic_num = pic_num + 1
+                
+                # dir = "C:/Users/Amir/Desktop/KarAmoozi/{tarikh}"
+                # if not os.path.isdir(mypath):
+                #     tarikh = datetime.now().strftime("%Y-%m-%d")
+                #     os.makedirs(dir)
+
+                cv2.imwrite(f"Picture{pic_num}.jpg", frame)
 
     cv2.imshow('Test', frame)
 
