@@ -5,16 +5,42 @@ from datetime import datetime, timedelta
 
 log = open("shape_movement_log.txt", mode="a")
 
-pic_num = int(0)
+pic_num = 0
 
-cam = cv2.VideoCapture(0)
-#cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
+#cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
 
 last_center = None
 last_check_time = datetime.now()
 last_detected_time = datetime.now()
-threshold = 20
-missing_threshold = 10 
+threshold = 15  
+missing_threshold = 10  
+
+def is_approximate_hexagon(approx):
+    if len(approx) != 6:
+        return False
+    
+    if not cv2.isContourConvex(approx):
+        return False
+    
+    angles = []
+    for i in range(6):
+        p1 = approx[i][0]
+        p2 = approx[(i + 1) % 6][0]
+        p3 = approx[(i + 2) % 6][0]
+        
+        vec1 = p1 - p2
+        vec2 = p3 - p2
+        
+        cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+        angle = np.arccos(cos_angle) * 180 / np.pi
+        angles.append(angle)
+    
+    for angle in angles:
+        if angle < 55 or angle > 155:
+            return False
+    
+    return True
 
 while True:
     ret, frame = cam.read()
@@ -23,24 +49,24 @@ while True:
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 6)
 
-    edged = cv2.Canny(blurred, 50, 150)
+    thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
 
-    contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     detected = False  
 
     for contour in contours:
         # Detect
-        epsilon = 0.02 * cv2.arcLength(contour, True) # True = Closed Lines
+        epsilon = 0.017 * cv2.arcLength(contour, True) # True = Closed Lines
         approx = cv2.approxPolyDP(contour, epsilon, True) # R
 
-        if len(approx) == 6: 
+        if is_approximate_hexagon(approx):
             area = cv2.contourArea(contour)
-            if area > 1000: #by pixel
+            if area > 300:  #by pixel
 
-                #For Area of the contour 
+                # For Area of the contour
                 M = cv2.moments(contour) #m00 = pixels in contour -- m10 & m01 for center
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
@@ -56,9 +82,9 @@ while True:
                                 movement_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
                                 log.write(f"Shape moved at {movement_time} from {last_center} to ({cx}, {cy}), Distance: {distance}\n")
                                 print(f"Shape moved at {movement_time} from {last_center} to ({cx}, {cy}), Distance: {distance}")
-                                pic_num = pic_num + 1
+                                pic_num += 1
                                 cv2.imwrite(f"Picture_moved{pic_num}.jpg", frame)
-                        
+
                         last_center = (cx, cy)
                         last_check_time = current_time
 
@@ -66,23 +92,12 @@ while True:
                     last_detected_time = current_time
 
                 cv2.drawContours(frame, [approx], -1, (0, 255, 0), 3)
-                
-                # current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                # log.write(f"Square detected at {current_time}\n")
-                # print(approx)
-                # print(f"Square detected at {current_time}")
-
-                # pic_num = pic_num + 1
-                
-                # dir = "C:/Users/Amir/Desktop/KarAmoozi/{tarikh}"
-                # if not os.path.isdir(mypath):
-                #     tarikh = datetime.now().strftime("%Y-%m-%d")
-                #     os.makedirs(dir)
 
     if not detected and (datetime.now() - last_detected_time).seconds > missing_threshold:
         cv2.putText(frame, "ALARM: Shape not detected!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
         print("ALARM: Shape not detected!")
 
+    frame = cv2.resize(frame, (1360, 750))
     cv2.imshow('Test', frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
