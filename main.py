@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit
+from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider
 from PyQt5.QtGui import QImage, QPixmap
 
 cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
@@ -90,11 +90,11 @@ def is_star(contour, num_vertices=10, angle_threshold=10, side_length_threshold=
 
     return True
 
-def detect_shapes(contours):
+def detect_shapes(contours, epsilon_val):
     hexagons = []
     stars = []
     for contour in contours:
-        epsilon = 0.04 * cv2.arcLength(contour, True)
+        epsilon = epsilon_val * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
         if is_approximate_hexagon(approx):
             area = cv2.contourArea(contour)
@@ -166,6 +166,23 @@ class VideoWindow(QWidget):
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self.delete_region)
 
+
+############################################################################
+
+        self.epsilon_value = 0.04
+        
+        self.epsilon_label = QLabel(f'Epsilon: {self.epsilon_value:.3f}', self)
+        self.epsilon_label.setGeometry(1400, 430, 100, 40)
+        
+        self.epsilon_slider = QSlider(Qt.Horizontal, self)
+        self.epsilon_slider.setGeometry(1400, 400, 100, 40)
+        self.epsilon_slider.setMinimum(1)
+        self.epsilon_slider.setMaximum(100)
+        self.epsilon_slider.setValue(int(self.epsilon_value * 1000))
+        self.epsilon_slider.valueChanged.connect(self.update_epsilon)
+
+#############################################################################
+
         self.info_box = QTextEdit(self)
         self.info_box.setGeometry(20, 700, 760, 250)
         self.info_box.setReadOnly(True)
@@ -181,7 +198,7 @@ class VideoWindow(QWidget):
         self.last_detected_time = datetime.now()
         self.rect_ready = False
 
-        self.region_last_check_times = {}
+        self.region_last_check_times = {} 
         self.region_hexagon_positions = {}
         self.region_last_detected_times = {}
         self.region_last_alarm_times = {}
@@ -193,6 +210,11 @@ class VideoWindow(QWidget):
 
 
         self.pic_num = 0
+
+    def update_epsilon(self):
+        self.epsilon_value = float(float(self.epsilon_slider.value()) / 1000.0)
+        self.epsilon_label.setText(f'Epsilon: {self.epsilon_value:.3f}')
+
 
 
     def closeEvent(self, event):
@@ -296,7 +318,7 @@ class VideoWindow(QWidget):
                 thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                detected_hexagons, detected_stars = detect_shapes(contours)
+                detected_hexagons, detected_stars = detect_shapes(contours, self.epsilon_value)
 
                 if region not in self.region_last_check_times:
                     self.region_last_check_times[region] = datetime.now()
