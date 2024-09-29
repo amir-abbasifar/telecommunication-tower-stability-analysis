@@ -125,6 +125,21 @@ class VideoWindow(QWidget):
         self.exit_button.setGeometry(700, 220, 100, 40)
         self.exit_button.clicked.connect(self.close)
 
+        self.regions = []
+
+        self.last_alarm_time = datetime.now()
+
+
+        self.add_button = QPushButton("Add Region", self)
+        self.add_button.setGeometry(700, 280, 100, 40)
+        self.add_button.setEnabled(False) 
+        self.add_button.clicked.connect(self.add_region)
+
+        self.delete_button = QPushButton("Delete Region", self)
+        self.delete_button.setGeometry(700, 340, 100, 40)
+        self.delete_button.setEnabled(False)
+        self.delete_button.clicked.connect(self.delete_region)
+
         self.info_box = QTextEdit(self)
         self.info_box.setGeometry(20, 520, 760, 250)
         self.info_box.setReadOnly(True)
@@ -139,90 +154,175 @@ class VideoWindow(QWidget):
         self.last_check_time = datetime.now()
         self.last_detected_time = datetime.now()
         self.hexagon_positions = []
+        self.rect_ready = False
+
+        self.region_last_check_times = {} 
+        self.region_hexagon_positions = {} 
+        self.region_last_detected_times = {} 
+        self.region_last_alarm_times = {} 
+
+        self.is_started = False
+
 
     def start_video(self):
+        self.is_started = True
         self.timer.start(30)
+        self.add_button.setEnabled(True) 
+        self.delete_button.setEnabled(True)
 
     def stop_video(self):
+        self.is_started =False
         self.timer.stop()
+        self.add_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drawing = True
-            self.ix, self.iy = event.x(), event.y()
-            self.rx1, self.ry1 = self.ix, self.iy
-            self.rx2, self.ry2 = self.ix, self.iy
-            self.update_frame()
+        if self.is_started:
+            if event.button() == Qt.LeftButton:
+                self.drawing = True
+                self.ix, self.iy = event.x(), event.y()
+                self.rx1, self.ry1 = self.ix, self.iy
+                self.rx2, self.ry2 = self.ix, self.iy
+                self.delete_button.setEnabled(False)
+                self.update_frame()
 
     def mouseMoveEvent(self, event):
-        if self.drawing:
-            self.rx2, self.ry2 = event.x(), event.y()
-            self.update_frame()
+        if self.is_started:
+            if self.drawing:
+                self.rx2, self.ry2 = event.x(), event.y()
+                self.rect_ready = True
+                self.update_frame()
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drawing = False
-            self.rx2, self.ry2 = event.x(), event.y()
+        if self.is_started:
+            if event.button() == Qt.LeftButton:
+                self.drawing = False
+                self.rx2, self.ry2 = event.x(), event.y()
+                self.rect_ready = True
+                self.delete_button.setEnabled(True)
+                self.update_frame()
+
+    def add_region(self):
+        if self.rx1 == self.rx2 or self.ry1 == self.ry2:
+            self.info_box.append("No region selected!")
+            return
+
+        new_region = (min(self.rx1, self.rx2), min(self.ry1, self.ry2), max(self.rx1, self.rx2), max(self.ry1, self.ry2))
+        
+        for region in self.regions:
+            if (abs(new_region[0] - region[0]) < 5 and 
+                abs(new_region[1] - region[1]) < 5 and 
+                abs(new_region[2] - region[2]) < 5 and 
+                abs(new_region[3] - region[3]) < 5):
+                self.info_box.append("Region already added!")
+                return
+
+        self.regions.append(new_region)
+        self.info_box.append(f"Region added: {new_region}")
+
+        self.rx1 = self.rx2 = self.ry1 = self.ry2 = 0
+        self.update_frame()
+
+
+    def delete_region(self):
+        if self.regions:
+            self.regions.pop()
+            self.info_box.append("Last region deleted.")
+            self.add_button.setEnabled(True)
+            self.rect_ready = False
             self.update_frame()
+        
+        self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
+        self.rect_ready = False
 
     def update_frame(self):
         ret, frame = cam.read()
         if ret:
-            x1, x2 = min(self.rx1, self.rx2), max(self.rx1, self.rx2)
-            y1, y2 = min(self.ry1, self.ry2), max(self.ry1, self.ry2)
+            for region in self.regions:
+                x1, x2 = min(region[0], region[2]), max(region[0], region[2])
+                y1, y2 = min(region[1], region[3]), max(region[1], region[3])
 
-            if x1 < x2 and y1 < y2:
-                roi = frame[y1:y2, x1:x2]
-            else:
-                roi = frame
+                if x1 < x2 and y1 < y2:
+                    roi = frame[y1:y2, x1:x2]
+                else:
+                    roi = frame
 
-            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (3, 3), 5)
-            thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
-            contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                blurred = cv2.GaussianBlur(gray, (3, 3), 5)
+                thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
+                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            detected_hexagons, detected_circles = detect_hexagons_and_circles(contours)
-            nearby_circles = find_nearby_circles(detected_hexagons, detected_circles, distance_threshold)
+                detected_hexagons, detected_circles = detect_hexagons_and_circles(contours)
+                nearby_circles = find_nearby_circles(detected_hexagons, detected_circles, distance_threshold)
 
-            current_positions = []
-            for hexagon in detected_hexagons:
-                M = cv2.moments(hexagon)
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    current_positions.append((cx, cy))
-                    cv2.circle(roi, (cx, cy), 4, (255, 0, 0), -1)
+                current_positions = []
+                for hexagon in detected_hexagons:
+                    M = cv2.moments(hexagon)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        current_positions.append((cx, cy))
+                        cv2.circle(roi, (cx, cy), 4, (255, 0, 0), -1)
 
-            if datetime.now() - self.last_check_time > timedelta(seconds=movement_check_interval):
-                if self.hexagon_positions and check_movement(current_positions, self.hexagon_positions, threshold):
-                    self.info_box.append("Shape Moved!")
+                if region not in self.region_last_check_times:
+                    self.region_last_check_times[region] = datetime.now()
 
-                self.hexagon_positions = current_positions
-                self.last_check_time = datetime.now()
+                if region not in self.region_hexagon_positions:
+                    self.region_hexagon_positions[region] = current_positions
 
-            for circle in nearby_circles:
-                M = cv2.moments(circle)
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-                    circle_center = (cx, cy)
-                    cv2.circle(roi, (cx, cy), 2, (0, 255, 0), -1)
+                if region not in self.region_last_detected_times:
+                    self.region_last_detected_times[region] = datetime.now()
 
-            if not detected_hexagons:
-                if (datetime.now() - self.last_detected_time).seconds > missing_threshold:
-                    cv2.putText(roi, "ALARM: Shape not detected!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-                    self.info_box.append("ALARM: Shape not detected!")
-            else:
-                self.last_detected_time = datetime.now()
+                if region not in self.region_last_alarm_times:
+                    self.region_last_alarm_times[region] = datetime.now()
 
-            if self.drawing or (self.rx1 != 0 and self.ry1 != 0 and self.rx2 != 0 and self.ry2 != 0):
+                if datetime.now() - self.region_last_check_times[region] > timedelta(seconds=movement_check_interval):
+                    if check_movement(current_positions, self.region_hexagon_positions[region], threshold):
+                        self.info_box.append(f"Shape Moved in region {region}!")
+
+                    self.region_hexagon_positions[region] = current_positions
+                    self.region_last_check_times[region] = datetime.now()
+
+                for circle in nearby_circles:
+                    M = cv2.moments(circle)
+                    if M["m00"] != 0:
+                        cx = int(M["m10"] / M["m00"])
+                        cy = int(M["m01"] / M["m00"])
+                        circle_center = (cx, cy)
+                        cv2.circle(roi, (cx, cy), 2, (0, 255, 0), -1)
+
+                if not detected_hexagons:
+                    if (datetime.now() - self.region_last_detected_times[region]).seconds > missing_threshold:
+                        if (datetime.now() - self.region_last_alarm_times[region]).seconds > missing_threshold:
+                            self.info_box.append(f"ALARM: Shape not detected in region {region}!")
+                            self.region_last_alarm_times[region] = datetime.now()
+                else:
+                    self.region_last_detected_times[region] = datetime.now()
+
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-            qformat = QImage.Format_RGB888
-            out_image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], qformat)
-            out_image = out_image.rgbSwapped()
-            self.video_label.setPixmap(QPixmap.fromImage(out_image))
+                text = f"({x1}, {y1}, {x2}, {y2})"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.putText(frame, text, (x1, y1 - 10), font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+                    
+        if self.drawing or (self.rx1 != 0 and self.ry1 != 0 and self.rx2 != 0 and self.ry2 != 0):
+            cv2.rectangle(frame, (self.rx1, self.ry1), (self.rx2, self.ry2), (0, 255, 0), 2)
 
+            text = f"({self.rx1}, {self.ry1}, {self.rx2}, {self.ry2})"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(frame, text, (self.rx1, self.ry1 - 10), font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+
+
+        qformat = QImage.Format_RGB888
+        out_image = QImage(frame, frame.shape[1], frame.shape[0], frame.strides[0], qformat)
+        out_image = out_image.rgbSwapped()
+        self.video_label.setPixmap(QPixmap.fromImage(out_image))
+
+    def is_within_regions(self, x, y):
+        for region in self.regions:
+            if region[0] <= x <= region[2] and region[1] <= y <= region[3]:
+                return True
+        return False
 
 if __name__ == '__main__':
     import sys
