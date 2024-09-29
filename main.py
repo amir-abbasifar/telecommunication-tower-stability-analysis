@@ -8,8 +8,8 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
 
-#cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
-cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
+#cam = cv2.VideoCapture(0)
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 last_center = None
@@ -136,7 +136,7 @@ class SettingsWindow(QWidget):
         super().__init__()
         self.parent = parent
         self.setWindowTitle("Settings")
-        self.setGeometry(500, 200, 400, 460)
+        self.setGeometry(500, 200, 400, 600)
 
         QLabel("Slow Scan Time:", self).setGeometry(20, 20, 150, 30)
         self.scan_time_slow_input = QLineEdit(self)
@@ -168,38 +168,58 @@ class SettingsWindow(QWidget):
         self.flag_limit_input.setGeometry(210, 220, 100, 30)
         self.flag_limit_input.setText(str(self.parent.flag_for_find_true_hexagons_limit))
 
-        QLabel("threshold of check movement:", self).setGeometry(20, 260, 1760, 30)
-        self.threshold_of_check_movement_input = QLineEdit(self)
-        self.threshold_of_check_movement_input.setGeometry(210, 260, 100, 30)
-        self.threshold_of_check_movement_input.setText(str(self.parent.threshold_of_check_movement))
+        QLabel("Missing Time: ", self).setGeometry(20, 260, 200, 30)
+        self.missing_time_input = QLineEdit(self)
+        self.missing_time_input.setGeometry(210, 260, 100, 30)
+        self.missing_time_input.setText(str(self.parent.missing_hexagon_threshold))
+
+        QLabel("Movement Sensitivity:", self).setGeometry(20, 300, 200, 30)
+        self.threshold_of_movement_sensitivity_input = QLineEdit(self)
+        self.threshold_of_movement_sensitivity_input.setGeometry(210, 300, 100, 30)
+        self.threshold_of_movement_sensitivity_input.setText(str(self.parent.threshold_of_movement_sensitivity))
+
+        QLabel("Yellow Sensitivity:", self).setGeometry(20, 340, 200, 30)
+        self.threshold_of_yellow_sensitivity_input = QLineEdit(self)
+        self.threshold_of_yellow_sensitivity_input.setGeometry(210, 340, 100, 30)
+        self.threshold_of_yellow_sensitivity_input.setText(str(self.parent.threshold_of_yellow_sensitivity))
+
+        QLabel("Red Sensitivity:", self).setGeometry(20, 380, 200, 30)
+        self.threshold_of_red_sensitivity_input = QLineEdit(self)
+        self.threshold_of_red_sensitivity_input.setGeometry(210, 380, 100, 30)
+        self.threshold_of_red_sensitivity_input.setText(str(self.parent.threshold_of_red_sensitivity))
+
+        QLabel("Number of Hexagons:", self).setGeometry(20, 420, 200, 30)
+        self.number_of_hexagons_input = QLineEdit(self)
+        self.number_of_hexagons_input.setGeometry(210, 420, 100, 30)
+        self.number_of_hexagons_input.setText(str(self.parent.number_of_hexagons))
 
         self.epsilon_checkbox = QtWidgets.QCheckBox("Static", self)
-        self.epsilon_checkbox.setGeometry(20, 300, 100, 40)
+        self.epsilon_checkbox.setGeometry(20, 460, 100, 40)
         self.epsilon_checkbox.setChecked(True)
         self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
         self.epsilon_checkbox.stateChanged.connect(self.toggle_epsilon_slider)
 
         self.epsilon_label = QLabel(f'Epsilon: {self.parent.epsilon_value:.3f}', self)
-        self.epsilon_label.setGeometry(130, 300, 100, 40)
+        self.epsilon_label.setGeometry(130, 460, 100, 40)
 
         self.epsilon_slider = QSlider(Qt.Horizontal, self)
         self.epsilon_slider.setEnabled(self.epsilon_checkbox.isChecked())
-        self.epsilon_slider.setGeometry(230, 300, 100, 40)
+        self.epsilon_slider.setGeometry(230, 460, 100, 40)
         self.epsilon_slider.setMinimum(1)
         self.epsilon_slider.setMaximum(100)
         self.epsilon_slider.setValue(int(self.parent.epsilon_value * 1000))
         self.epsilon_slider.valueChanged.connect(self.update_epsilon)
 
         self.ok_button = QPushButton("OK", self)
-        self.ok_button.setGeometry(260, 370, 100, 40)
+        self.ok_button.setGeometry(260, 520, 100, 40)
         self.ok_button.clicked.connect(self.apply_settings)
 
         self.Reset_button = QPushButton("Reset", self)
-        self.Reset_button.setGeometry(150, 370, 100, 40)
+        self.Reset_button.setGeometry(150, 520, 100, 40)
         self.Reset_button.clicked.connect(self.reset_settings)
 
         self.cancel_button = QPushButton("Cancel", self)
-        self.cancel_button.setGeometry(40, 370, 100, 40)
+        self.cancel_button.setGeometry(40, 520, 100, 40)
         self.cancel_button.clicked.connect(self.cancel_settings)
 
     def toggle_epsilon_slider(self, state):
@@ -219,7 +239,12 @@ class SettingsWindow(QWidget):
             self.number_of_fast_scan_input.setText(str(self.parent.default_number_of_fast_scan))
             self.number_of_medium_scan_input.setText(str(self.parent.default_number_of_medium_scan))
             self.flag_limit_input.setText(str(self.parent.default_flag_for_find_true_hexagons_limit))
-            self.threshold_of_check_movement_input.setText(str(self.parent.default_threshold_of_check_movement))
+            self.missing_time_input.setText(str(self.parent.default_missing_hexagon_threshold))##
+            self.threshold_of_movement_sensitivity_input.setText(str(self.parent.default_threshold_of_movement_sensitivity))
+            self.threshold_of_yellow_sensitivity_input.setText(str(self.parent.default_threshold_of_yellow_sensitivity))
+            self.threshold_of_red_sensitivity_input.setText(str(self.parent.default_threshold_of_red_sensitivity))
+            self.number_of_hexagons_input.setText(str(self.parent.default_number_of_hexagons))
+
             self.epsilon_slider.setValue(int(self.parent.default_epsilon_value * 1000))
             self.epsilon_slider.valueChanged.connect(self.update_epsilon)
             
@@ -231,7 +256,11 @@ class SettingsWindow(QWidget):
         self.parent.number_of_fast_scan = int(self.number_of_fast_scan_input.text())
         self.parent.number_of_medium_scan = int(self.number_of_medium_scan_input.text())
         self.parent.flag_for_find_true_hexagons_limit = int(self.flag_limit_input.text())
-        self.parent.threshold_of_check_movement = int(self.threshold_of_check_movement_input.text())
+        self.parent.missing_hexagon_threshold = int(self.missing_time_input.text())
+        self.parent.threshold_of_movement_sensitivity = int(self.threshold_of_movement_sensitivity_input.text())
+        self.parent.threshold_of_yellow_sensitivity = int(self.threshold_of_yellow_sensitivity_input.text())
+        self.parent.threshold_of_red_sensitivity = int(self.threshold_of_red_sensitivity_input.text())
+        self.parent.number_of_hexagons = int(self.number_of_hexagons_input.text())
 
         self.epsilon_checkbox.setChecked(self.epsilon_checkbox.isChecked())
         self.parent.epsilon_value = self.epsilon_slider.value() / 1000.0
@@ -239,6 +268,7 @@ class SettingsWindow(QWidget):
         self.close()
 
 class VideoWindow(QWidget):
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Shape Detector")
@@ -324,24 +354,42 @@ class VideoWindow(QWidget):
         self.flag_counter_red = 0
         self.red_warnings = 0
         self.yellow_warnings = 0
+        self.orange_warnings = 0
         ##
         self.default_scan_time_slow = 3
-        self.default_scan_time_fast = 0.1
+        self.default_scan_time_fast = 0.3
         self.default_scan_time_medium = 0.3
-        self.default_number_of_fast_scan = 50
-        self.default_number_of_medium_scan = 50
-        self.default_flag_for_find_true_hexagons_limit = 3
-        self.default_threshold_of_check_movement = 10
-        self.default_epsilon_value = 0.04
+        self.default_number_of_fast_scan = 20
+        self.default_number_of_medium_scan = 25
+        self.default_flag_for_find_true_hexagons_limit = 4
+        self.default_epsilon_value = 0.035
+        self.default_missing_hexagon_threshold = 5
+        self.default_threshold_of_movement_sensitivity = 2
+        self.default_threshold_of_yellow_sensitivity = 1
+        self.default_threshold_of_red_sensitivity = 20
+        self.default_number_of_hexagons = 4
+
         self.scan_time_slow = self.default_scan_time_slow
         self.scan_time_fast = self.default_scan_time_fast
         self.scan_time_medium = self.default_scan_time_medium
         self.number_of_fast_scan = self.default_number_of_fast_scan
         self.number_of_medium_scan = self.default_number_of_medium_scan
         self.flag_for_find_true_hexagons_limit = self.default_flag_for_find_true_hexagons_limit
-        self.threshold_of_check_movement = self.default_threshold_of_check_movement
         self.epsilon_value = self.default_epsilon_value
+        self.missing_hexagon_threshold = self.default_missing_hexagon_threshold
+        self.threshold_of_movement_sensitivity = self.default_threshold_of_movement_sensitivity
+        self.threshold_of_yellow_sensitivity = self.default_threshold_of_yellow_sensitivity
+        self.threshold_of_red_sensitivity = self.default_threshold_of_red_sensitivity
+        self.number_of_hexagons = self.default_number_of_hexagons
         ##
+
+        self.hexagon_missing_timer_start = None 
+        self.hexagon_missing_warning_shown = False
+        self.ex_state = ""
+
+        self.warning_red_is_enabled = False
+        self.fall_warning = 0
+
 
         self.warning_label = QLabel("Warnings:", self)
         self.warning_label.setGeometry(1400, 560, 70, 70)
@@ -350,7 +398,8 @@ class VideoWindow(QWidget):
         self.red_warning_lable.setGeometry(1480, 580, 80, 80)
         self.yellow_warning_lable = QLabel(f"Yellow: {self.yellow_warnings}", self)
         self.yellow_warning_lable.setGeometry(1480, 600, 80, 80)
-        
+        self.orange_warning_lable = QLabel(f"Orange: {self.orange_warnings}", self)
+        self.orange_warning_lable.setGeometry(1480, 620, 80, 80)
         
         self.settings_button = QPushButton("Settings", self)
         self.settings_button.setGeometry(1400, 400, 100, 40)
@@ -379,6 +428,11 @@ class VideoWindow(QWidget):
             self.status_label.setStyleSheet("background-color: red; border-radius: 25px;")
         elif color == "white":
             self.status_label.setStyleSheet("background-color: white; border-radius: 25px;")
+        elif color == "orange":
+            self.status_label.setStyleSheet("background-color: rgb(255,165,0); border-radius: 25px;")
+        elif color == "black":
+            self.status_label.setStyleSheet("background-color: rgb(73,0,0); border-radius: 25px;")
+
 
 
     def closeEvent(self, event):
@@ -442,7 +496,6 @@ class VideoWindow(QWidget):
         new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
         #new_region = (1176,103,1260,163)
 
-        
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and 
                 abs(new_region[1] - region[1]) < 5 and 
@@ -467,10 +520,35 @@ class VideoWindow(QWidget):
             self.update_status("white")
             self.state = "init"
             self.counter_flag = 0
+            self.red_warnings = 0
+            self.yellow_warnings = 0
+            self.orange_warnings = 0
+            self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
+            self.red_warning_lable.setText(f"Red: {self.yellow_warnings}")
+            self.orange_warning_lable.setText(f"Orange: {self.yellow_warnings}")
             self.update_frame()
         
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
         self.rect_ready = False
+
+    def check_missing_hexagons(self, current_time, hexagons_unique_centers):
+        if len(hexagons_unique_centers) < len(self.hexagon_true_unique_centers) / 2:
+            if self.hexagon_missing_timer_start is None:
+                self.hexagon_missing_timer_start = current_time
+            elif current_time - self.hexagon_missing_timer_start >= self.missing_hexagon_threshold:
+                if not self.hexagon_missing_warning_shown:
+                    self.info_box.append("Warning: Less than half of the hexagons have been detected.")
+                    if not self.warning_red_is_enabled:
+                        self.update_status("orange")
+                    self.hexagon_missing_warning_shown = True
+                    self.info_box.append("State: Orange")
+                    self.state = "orange"
+                    self.orange_warnings += 1
+                    self.orange_warning_lable.setText(f"Orange: {self.orange_warnings}")
+        else:
+            self.hexagon_missing_timer_start = None
+            self.hexagon_missing_warning_shown = False
+
 
     def update_frame(self):
         ret, frame = cam.read()
@@ -483,7 +561,7 @@ class VideoWindow(QWidget):
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                 blurred = cv2.GaussianBlur(gray, (3, 3), 5)
                 thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
-                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
                 detected_hexagons, detected_stars = detect_shapes(contours, self.epsilon_value)
 
@@ -507,13 +585,13 @@ class VideoWindow(QWidget):
                         hexagons_last_centers.append((cx, cy))
                         cv2.circle(roi, (cx, cy), 3, (0, 0, 255), -1)
 
-                for star in detected_stars:
-                    M = cv2.moments(star)
-                    if M["m00"] != 0:
-                        cx = int(M["m10"] / M["m00"])
-                        cy = int(M["m01"] / M["m00"])
-                        stars_last_centers.append((cx, cy))
-                        cv2.circle(roi, (cx, cy), 2, (255, 255, 0), -1)
+                # for star in detected_stars:
+                #     M = cv2.moments(star)
+                #     if M["m00"] != 0:
+                #         cx = int(M["m10"] / M["m00"])
+                #         cy = int(M["m01"] / M["m00"])
+                #         stars_last_centers.append((cx, cy))
+                #         cv2.circle(roi, (cx, cy), 2, (255, 255, 0), -1)
 
                 hexagons_unique_centers = count_unique_positions(hexagons_last_centers)
                 stars_unique_centers = count_unique_positions(stars_last_centers)
@@ -531,98 +609,154 @@ class VideoWindow(QWidget):
                 if current_time - self.region_last_count_time[region] >= self.scan_time:
 
                     if self.state == "init":
-                        if self.counter_flag == 15:
-                            self.rx1 = 0
-                            self.rx2 = cam_width
-                            self.ry1 = 0
-                            self.ry2 = cam_height
-                            self.add_region()
+                        if self.counter_flag == 6:
+                            # self.rx1 = 0
+                            # self.rx2 = cam_width
+                            # self.ry1 = 0
+                            # self.ry2 = cam_height
+                            # self.add_region()
                             self.counter_flag = 0
                         else:
                             self.counter_flag += 1
 
                         if self.flag_for_find_true_hexagons < self.flag_for_find_true_hexagons_limit:
-                            if self.hexagons_last_unique_centers and not check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
+                            if self.hexagons_last_unique_centers and not check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_movement_sensitivity):
                                 self.flag_for_find_true_hexagons += 1
+                            else: 
+                                self.flag_for_find_true_hexagons = 0
                         else:
-                            self.state = "slow_scan"
-                            self.hexagon_true_unique_centers = hexagons_unique_centers
-                            self.update_status("green")
+                            if len(hexagons_unique_centers) >= self.number_of_hexagons:
+                                self.flag_for_find_true_hexagons = 0
+                                self.info_box.append("State: Slow Scan")
+                                self.state = "slow_scan"
+                                self.hexagon_true_unique_centers = hexagons_unique_centers
+                                self.info_box.append(f"Number of Hexagons Detected: {len(self.hexagon_true_unique_centers)}")
+                                self.update_status("green")
 
                     elif self.state == "slow_scan":
+                        self.ex_state = self.state
                         self.scan_time = self.scan_time_slow
-                        if not check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
-                            pass
-                        else:
+                        if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_movement_sensitivity) or check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
+                            self.info_box.append("State: Fast Scan")
                             self.state = "fast_scan"
                             self.scan_time = self.scan_time_fast
                             self.counter_flag = 0
+                        self.check_missing_hexagons(current_time, hexagons_unique_centers)
+
 
                     elif self.state == "fast_scan":
+                        self.ex_state = self.state
                         if not self.counter_flag == self.number_of_fast_scan:
-                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
-                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
-                                    self.flag_counter_yellow += 1
-                                else:
-                                    self.flag_counter_red += 1
+
+                            if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
+                                self.flag_counter_yellow += 1
                             else:
-                                self.flag_counter_green += 1
+                                if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
+                                    self.flag_counter_red += 1
+                                else:
+                                    self.flag_counter_green += 1
+
+
                             self.counter_flag += 1
 
                         else:
                             self.state = "decision"
                             self.counter_flag = 0
-                            self.info_box.append("Decision Started.")
+                            self.info_box.append("State: Decision")
+
+                        self.check_missing_hexagons(current_time, hexagons_unique_centers)
+
 
 
                     elif self.state == "decision":
-                        if max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_green:
-                            self.flag_counter_yellow = 0
-                            self.flag_counter_red = 0
-                            self.flag_counter_green = 0
-                            self.state = "slow_scan"
-                            self.update_status("green")
-                            self.info_box.append("Decision Done: Green.")
-                        elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_red:
+                        if max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_red:
                             self.flag_counter_yellow = 0
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.update_status("red")
                             self.state = "red_calibration"
                             self.red_warnings += 1
-                            self.info_box.append("Decision Done: Red.")
+                            self.red_warning_lable.setText(f"Red: {self.red_warnings}")
+                            self.info_box.append("State: Red")
+
+                        elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_green:
+                            self.flag_counter_yellow = 0
+                            self.flag_counter_red = 0
+                            self.flag_counter_green = 0
+                            self.state = "slow_scan"
+                            if not self.warning_red_is_enabled:
+                                self.update_status("green")
+                            self.info_box.append("State: Slow Scan")
+
                         elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_yellow:
                             self.flag_counter_yellow = 0
                             self.flag_counter_red = 0
                             self.flag_counter_green = 0
                             self.state = "yellow"
-                            self.update_status("yellow")
+                            if not self.warning_red_is_enabled:
+                                self.update_status("yellow")
                             self.yellow_warnings += 1
+                            self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
                             self.info_box.append("Warning: Unstable weather conditions.")
 
                     elif self.state == "yellow":
+                        self.info_box.append("State: Medium Scan")
                         self.state = "medium_scan"
-                        self.info_box.append("Switching yellow state to medium scan state.")
                         self.scan_time = self.scan_time_medium
-                    
-                    elif self.state == "medium_scan":
-                        if not self.counter_flag == self.number_of_medium_scan:
-                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_check_movement):
-                                if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_check_movement):
-                                    self.flag_counter_yellow += 1
-                                else:
-                                    self.flag_counter_red += 1
+
+                    elif self.state == "orange":
+                        if len(hexagons_unique_centers) == 0:
+                            if self.fall_warning > 2:
+                                self.state = "black"
                             else:
-                                self.flag_counter_green += 1
+                                self.fall_warning += 1
+                        elif len(hexagons_unique_centers) < len(self.hexagon_true_unique_centers) / 2:
+                            self.fall_warning = 0
+                        else:
+                            self.fall_warning = 0
+                            self.hexagon_missing_timer_start = None
+                            self.hexagon_missing_warning_shown = False
+                            self.state = self.ex_state
+
+                            if self.state == "slow_scan":
+                                if not self.warning_red_is_enabled:
+                                    self.update_status("green")
+                                self.info_box.append("State: Slow Scan")
+                            elif self.state == "medium_scan":
+                                if not self.warning_red_is_enabled:
+                                    self.update_status("yellow")
+                                self.info_box.append("State: Yellow")
+                    elif self.state == "black":
+                        self.scan_time = self.scan_time_slow ##
+                        self.info_box.append("!!! Fall Warning !!!")
+                        #cv2.putText(frame, "!!! Fall Warning !!!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+                        self.update_status("black")
+                        
+                    elif self.state == "medium_scan":
+                        self.ex_state = self.state
+                        if not self.counter_flag == self.number_of_medium_scan:
+                            if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
+                                self.flag_counter_yellow += 1
+                            else:
+                                if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
+                                    self.flag_counter_red += 1
+                                else:
+                                    self.flag_counter_green += 1
                             self.counter_flag += 1
 
                         else:
+                            self.info_box.append("State: Decision")
                             self.state = "decision"
                             self.counter_flag = 0
+
+                        self.check_missing_hexagons(current_time, hexagons_unique_centers)
                     
                     elif self.state == "red_calibration":
+                        self.warning_red_is_enabled = True
+                        self.info_box.append("State: Slow Scan")
                         self.state = "slow_scan"
-                        self.hexagon_true_unique_centers = hexagons_unique_centers##################################Warning#########################
+                        if len(hexagons_unique_centers) == len(self.hexagon_true_unique_centers):
+                            self.hexagon_true_unique_centers = hexagons_unique_centers
 
                     self.region_last_count_time[region] = current_time
                     self.hexagons_last_unique_centers = hexagons_unique_centers
