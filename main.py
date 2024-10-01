@@ -592,6 +592,7 @@ class VideoWindow(QWidget):
                             self.info_box.append("State: Slow Scan")
 
                     elif self.state == "orange":
+                        self.scan_time = self.scan_time_slow
                         if len(hexagons_unique_centers) == 0:
                             if self.fall_warning == 2:
                                 self.state = "black"
@@ -611,7 +612,6 @@ class VideoWindow(QWidget):
                                 self.info_box.append("State: Slow Scan")
 
                     elif self.state == "black":
-                        self.scan_time = self.scan_time_slow ##
                         self.info_box.append("!!! Fall Warning !!!")
                         #cv2.putText(frame, "!!! Fall Warning !!!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
                         self.update_status("black")
