@@ -1,4 +1,4 @@
-#[CHANGE] log method - [ADD] time & warnings in log file
+#Better detection algorithm
 
 import cv2
 import numpy as np
@@ -33,9 +33,9 @@ cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
 threshold_of_fine_unique_pos = 30
-area_limit = 150
+area_limit = 80
 
-def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
+def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
     if len(approx) != 6:
         return False
 
@@ -59,7 +59,7 @@ def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
         angles.append(angle)
 
     for angle in angles:
-        if angle < 75 or angle > 160:
+        if angle < 50 or angle > 180:
             return False
 
     side_lengths = np.array(side_lengths)
@@ -613,19 +613,31 @@ class VideoWindow(QWidget):
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                 cv2.imshow("Gray", gray)
 
-                equalized = cv2.equalizeHist(gray)
-                cv2.imshow("Equalized", equalized)
+                gamma = 1.5
+                lookup_table = np.array([((i / 255.0) ** (1 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+                gamma_corrected = cv2.LUT(gray, lookup_table)
+                cv2.imshow("Gamma Corrected", gamma_corrected)
 
-                blurred = cv2.GaussianBlur(equalized, (7, 7), 2)
+                blurred = cv2.GaussianBlur(gamma_corrected, (7, 7), 1.5)
                 cv2.imshow("Blurred Gaussian", blurred)
 
                 blurred_median = cv2.medianBlur(blurred, 5)
                 cv2.imshow("Blurred Median", blurred_median)
 
-                thresh = cv2.adaptiveThreshold(blurred_median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                equalized2 = clahe.apply(blurred_median)
+                cv2.imshow("CLAHE", equalized2)
+
+                equalized = cv2.equalizeHist(equalized2)
+                cv2.imshow("Equalized", equalized)
+
+
+                thresh = cv2.adaptiveThreshold(blurred_median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
                 cv2.imshow("Threshold", thresh)
 
-                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+
+                #contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 50]
 
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
                 hexagons_last_centers = []
