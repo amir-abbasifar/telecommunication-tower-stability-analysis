@@ -1,3 +1,5 @@
+#[DELETE] medium scan - [ADD] wind status
+
 import cv2
 import numpy as np
 import time
@@ -8,7 +10,8 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
 
-cam = cv2.VideoCapture('rtsp://admin:admin1234@2.144.231.28:554/cam/realmonitor?channel=1&subtype=0')
+#cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
+cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
 #cam = cv2.VideoCapture(0)
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -16,7 +19,6 @@ cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 min_side_length = 2
 threshold_of_fine_unique_pos = 10
 area_limit = 50
-
 
 def is_approximate_hexagon(approx):
     if len(approx) != 6:
@@ -336,6 +338,12 @@ class VideoWindow(QWidget):
         self.status_label.setGeometry(1450, 500, 50, 50)
         self.update_status("white")
 
+        self.yellow_status_label = QLabel("Wind Status:", self)
+        self.yellow_status_label.setGeometry(1400, 540, 100, 100)
+        self.yellow_status_label = QLabel(self)
+        self.yellow_status_label.setGeometry(1490, 575, 30, 30)
+        self.wind_status("white")
+
 
         self.state = "init"
         self.flag_for_find_true_hexagons = 0
@@ -357,8 +365,8 @@ class VideoWindow(QWidget):
         self.default_flag_for_find_true_hexagons_limit = 4
         self.default_epsilon_value = 0.035
         self.default_missing_hexagon_threshold = 5
-        self.default_threshold_of_movement_sensitivity = 2
-        self.default_threshold_of_yellow_sensitivity = 1
+        self.default_threshold_of_movement_sensitivity = 10
+        self.default_threshold_of_yellow_sensitivity = 7
         self.default_threshold_of_red_sensitivity = 20
         self.default_number_of_hexagons = 4
 
@@ -385,14 +393,14 @@ class VideoWindow(QWidget):
 
 
         self.warning_label = QLabel("Warnings:", self)
-        self.warning_label.setGeometry(1400, 560, 70, 70)
+        self.warning_label.setGeometry(1400, 620, 70, 70)
 
         self.red_warning_lable = QLabel(f"Red: {self.red_warnings}", self)
-        self.red_warning_lable.setGeometry(1480, 580, 80, 80)
+        self.red_warning_lable.setGeometry(1480, 640, 80, 80)
         self.yellow_warning_lable = QLabel(f"Yellow: {self.yellow_warnings}", self)
-        self.yellow_warning_lable.setGeometry(1480, 600, 80, 80)
+        self.yellow_warning_lable.setGeometry(1480, 660, 80, 80)
         self.orange_warning_lable = QLabel(f"Orange: {self.orange_warnings}", self)
-        self.orange_warning_lable.setGeometry(1480, 620, 80, 80)
+        self.orange_warning_lable.setGeometry(1480, 680, 80, 80)
         
         self.settings_button = QPushButton("Settings", self)
         self.settings_button.setGeometry(1400, 400, 100, 40)
@@ -423,8 +431,16 @@ class VideoWindow(QWidget):
             self.status_label.setStyleSheet("background-color: white; border-radius: 25px;")
         elif color == "orange":
             self.status_label.setStyleSheet("background-color: rgb(255,165,0); border-radius: 25px;")
+        elif color == "crimson":
+            self.status_label.setStyleSheet("background-color: rgb(153,0,0); border-radius: 25px;")
         elif color == "black":
-            self.status_label.setStyleSheet("background-color: rgb(73,0,0); border-radius: 25px;")
+            self.status_label.setStyleSheet("background-color: rgb(0,0,0); border-radius: 25px;")
+
+    def wind_status(self, color):
+        if color == "white":
+            self.yellow_status_label.setStyleSheet("background-color: white; border-radius: 15;")
+        elif color == "yellow":
+            self.yellow_status_label.setStyleSheet("background-color: yellow; border-radius: 15;")
 
 
 
@@ -489,6 +505,7 @@ class VideoWindow(QWidget):
         new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
         #new_region = (1176,103,1260,163)
 
+        
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and 
                 abs(new_region[1] - region[1]) < 5 and 
@@ -600,6 +617,11 @@ class VideoWindow(QWidget):
 ########################################################################################################                    
 
                 if current_time - self.region_last_count_time[region] >= self.scan_time:
+                    if current_time - self.region_last_count_time[region] >= self.scan_time:
+                        if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity) and not self.state == "fast_scan" and not self.state == "init":
+                            self.wind_status("yellow")
+                        elif not self.state == "fast_scan":
+                            self.wind_status("white")
 
                     if self.state == "init":
                         if self.counter_flag == 6:
@@ -639,19 +661,13 @@ class VideoWindow(QWidget):
 
                     elif self.state == "fast_scan":
                         self.ex_state = self.state
+                        self.scan_time = self.scan_time_fast
                         if not self.counter_flag == self.number_of_fast_scan:
-
-                            if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
-                                self.flag_counter_yellow += 1
+                            if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
+                                self.flag_counter_red += 1
                             else:
-                                if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
-                                    self.flag_counter_red += 1
-                                else:
-                                    self.flag_counter_green += 1
-
-
+                                self.flag_counter_green += 1
                             self.counter_flag += 1
-
                         else:
                             self.state = "decision"
                             self.counter_flag = 0
@@ -681,25 +697,24 @@ class VideoWindow(QWidget):
                                 self.update_status("green")
                             self.info_box.append("State: Slow Scan")
 
-                        elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_yellow:
-                            self.flag_counter_yellow = 0
-                            self.flag_counter_red = 0
-                            self.flag_counter_green = 0
-                            self.state = "yellow"
-                            if not self.warning_red_is_enabled:
-                                self.update_status("yellow")
-                            self.yellow_warnings += 1
-                            self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
-                            self.info_box.append("Warning: Unstable weather conditions.")
+                        # elif max(self.flag_counter_green, self.flag_counter_red, self.flag_counter_yellow) == self.flag_counter_yellow:
+                        #     self.flag_counter_yellow = 0
+                        #     self.flag_counter_red = 0
+                        #     self.flag_counter_green = 0
+                        #     self.state = "yellow"
+                        #     self.wind_status("yellow")
+                        #     self.yellow_warnings += 1
+                        #     self.yellow_warning_lable.setText(f"Yellow: {self.yellow_warnings}")
+                        #     self.info_box.append("Warning: Unstable weather conditions.")
 
-                    elif self.state == "yellow":
-                        self.info_box.append("State: Medium Scan")
-                        self.state = "medium_scan"
-                        self.scan_time = self.scan_time_medium
+                    # elif self.state == "yellow":
+                    #     self.info_box.append("State: Medium Scan")
+                    #     self.state = "medium_scan"
+                    #     self.scan_time = self.scan_time_medium
 
                     elif self.state == "orange":
                         if len(hexagons_unique_centers) == 0:
-                            if self.fall_warning > 2:
+                            if self.fall_warning == 2:
                                 self.state = "black"
                             else:
                                 self.fall_warning += 1
@@ -715,34 +730,68 @@ class VideoWindow(QWidget):
                                 if not self.warning_red_is_enabled:
                                     self.update_status("green")
                                 self.info_box.append("State: Slow Scan")
-                            elif self.state == "medium_scan":
-                                if not self.warning_red_is_enabled:
-                                    self.update_status("yellow")
-                                self.info_box.append("State: Yellow")
+                            # elif self.state == "medium_scan":
+                            #     self.wind_status("yellow")
+                            #     self.info_box.append("State: Yellow")
+                    
+                    # elif self.state == "pre_black":
+                    #     if self.fall_warning == 2:
+                    #         self.info_box.append("Warning: Possibility of Falling.")
+                    #     self.update_status("crimson")
+                    #     if len(hexagons_unique_centers) == 0:
+                    #         if self.fall_warning == 3:
+                    #             self.info_box.append("Search the entire image.")
+                    #             region = (0, cam_width, 0, cam_height)
+                    #         elif self.fall_warning > 3:
+
+
+
+                            
+                    #         self.fall_warning += 1
+                    #     elif len(hexagons_unique_centers) < len(self.hexagon_true_unique_centers) / 2:
+                    #         self.fall_warning = 0
+                    #     else:
+                    #         self.fall_warning = 0
+                    #         self.hexagon_missing_timer_start = None
+                    #         self.hexagon_missing_warning_shown = False
+                    #         self.state = self.ex_state
+
+                    #         if self.state == "slow_scan":
+                    #             if not self.warning_red_is_enabled:
+                    #                 self.update_status("green")
+                    #             self.info_box.append("State: Slow Scan")
+                    #         elif self.state == "medium_scan":
+                    #             if not self.warning_red_is_enabled:
+                    #                 self.update_status("yellow")
+                    #             self.info_box.append("State: Yellow")
+
+
+
                     elif self.state == "black":
                         self.scan_time = self.scan_time_slow ##
                         self.info_box.append("!!! Fall Warning !!!")
                         #cv2.putText(frame, "!!! Fall Warning !!!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
                         self.update_status("black")
                         
-                    elif self.state == "medium_scan":
-                        self.ex_state = self.state
-                        if not self.counter_flag == self.number_of_medium_scan:
-                            if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
-                                self.flag_counter_yellow += 1
-                            else:
-                                if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
-                                    self.flag_counter_red += 1
-                                else:
-                                    self.flag_counter_green += 1
-                            self.counter_flag += 1
+                    # elif self.state == "medium_scan":
+                    #     self.ex_state = self.state
+                    #     if not self.counter_flag == self.number_of_medium_scan:
+                    #         if check_movement(hexagons_unique_centers, self.hexagon_true_unique_centers, self.threshold_of_red_sensitivity):
+                    #                 self.flag_counter_red += 1
+                    #         else:
+                    #             if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_yellow_sensitivity):
+                    #                 self.flag_counter_yellow += 1
+                    #             else:
+                    #                 self.flag_counter_green += 1
+                                
+                    #         self.counter_flag += 1
 
-                        else:
-                            self.info_box.append("State: Decision")
-                            self.state = "decision"
-                            self.counter_flag = 0
+                    #     else:
+                    #         self.info_box.append("State: Decision")
+                    #         self.state = "decision"
+                    #         self.counter_flag = 0
 
-                        self.check_missing_hexagons(current_time, hexagons_unique_centers)
+                    #     self.check_missing_hexagons(current_time, hexagons_unique_centers)
                     
                     elif self.state == "red_calibration":
                         self.warning_red_is_enabled = True
