@@ -1,4 +1,4 @@
-#[ADD] QThread for UI stop working problem
+#Connection lost have been handled
 
 import cv2
 import numpy as np
@@ -52,13 +52,16 @@ def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
         cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
         angle = np.arccos(cos_angle) * 180 / np.pi
         angles.append(angle)
+
     for angle in angles:
         if angle < 75 or angle > 160:
             return False
+        
     side_lengths = np.array(side_lengths)
     mean_length = np.mean(side_lengths)
     if np.any(side_lengths < min_side_length) or np.any(side_lengths > max_side_length):
         return False
+    
     length_deviation = np.std(side_lengths)
     if length_deviation > 0.2 * mean_length:
         return False
@@ -67,7 +70,7 @@ def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
 
 def detect_shapes(contours, epsilon_val):
     hexagons = []
-    new_data = []  # لیست برای ذخیره داده‌های جدید
+    new_data = []
 
     for contour in contours:
         epsilon = epsilon_val * cv2.arcLength(contour, True)
@@ -91,12 +94,15 @@ def detect_shapes(contours, epsilon_val):
     if new_data:
         new_df = pd.DataFrame(new_data)
         new_df.to_csv(log_file_path, mode='a', header=not os.path.exists(log_file_path), index=False)
+
     return hexagons
 
 def calculate_distance(p1, p2):
     return np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
 def check_movement(new_positions, old_positions, given_thresh):
+    if not new_positions or not old_positions:
+        return False
     for new_pos in new_positions:
         moved = True
         for old_pos in old_positions:
@@ -125,16 +131,31 @@ class VideoThread(QThread):
     def __init__(self):
         super().__init__()
         self._run_flag = True
+        self.cam = None
+        self.connect_camera()
+
+    def connect_camera(self):
+        self.cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
 
     def run(self):
         while self._run_flag:
-            ret, frame = cam.read()
+            if self.cam is None or not self.cam.isOpened():
+                self.connect_camera()
+                time.sleep(1)  # Wait before retrying
+                continue
+
+            ret, frame = self.cam.read()
             if ret:
                 self.change_pixmap_signal.emit(frame)
+            else:
+                self.cam.release()
+                self.cam = None
             time.sleep(0.033)  # 30 فریم بر ثانیه
 
     def stop(self):
         self._run_flag = False
+        if self.cam is not None:
+            self.cam.release()
         self.wait()
 
 class SettingsWindow(QWidget):
@@ -306,16 +327,12 @@ class VideoWindow(QWidget):
 
         self.is_started = False
 
-        #self.log_df = pd.DataFrame(columns=["timestamp", "region", "hexagons"])
-
         self.vertex_log_df = pd.DataFrame(columns=["timestamp", "region", "hexagon_id", "vertices"])
         self.log_interval = 1
         self.last_log_time = time.time()
 
         self.scan_time = 1
 
-        
-        ####################################### state
         self.status_label = QLabel("Status:", self)
         self.status_label.setGeometry(1400, 500, 50, 50)
         self.status_label = QLabel(self)
@@ -328,7 +345,6 @@ class VideoWindow(QWidget):
         self.wind_status_label.setGeometry(1490, 575, 30, 30)
         self.wind_status("white")
 
-
         self.state = "init"
         self.flag_for_find_true_hexagons = 0
         self.hexagons_last_unique_centers = []
@@ -339,12 +355,12 @@ class VideoWindow(QWidget):
         self.red_warnings = 0
         self.orange_warnings = 0
         self.wind_warnings = 0
-        ##
+
         self.default_scan_time_slow = 3
         self.default_scan_time_fast = 0.3
         self.default_number_of_fast_scan = 20
         self.default_flag_for_find_true_hexagons_limit = 4
-        self.default_epsilon_value = 0.035
+        self.default_epsilon_value = 0.032
         self.default_missing_hexagon_threshold = 5
         self.default_threshold_of_movement_sensitivity = 10
         self.default_threshold_of_wind_sensitivity = 7
@@ -361,9 +377,8 @@ class VideoWindow(QWidget):
         self.threshold_of_wind_sensitivity = self.default_threshold_of_wind_sensitivity
         self.threshold_of_red_sensitivity = self.default_threshold_of_red_sensitivity
         self.number_of_hexagons = self.default_number_of_hexagons
-        ##
 
-        self.hexagon_missing_timer_start = None 
+        self.hexagon_missing_timer_start = None
         self.hexagon_missing_warning_shown = False
         self.ex_state = ""
 
@@ -372,7 +387,6 @@ class VideoWindow(QWidget):
 
         self.timer = QElapsedTimer()
         self.timer.start()
-
 
         self.warning_label = QLabel("Warnings:", self)
         self.warning_label.setGeometry(1400, 620, 70, 70)
@@ -383,7 +397,7 @@ class VideoWindow(QWidget):
         self.orange_warning_lable.setGeometry(1480, 660, 80, 80)
         self.wind_warning_lable = QLabel(f"Wind: {self.wind_warnings}", self)
         self.wind_warning_lable.setGeometry(1480, 680, 80, 80)
-        
+
         self.settings_button = QPushButton("Settings", self)
         self.settings_button.setGeometry(1400, 400, 100, 40)
         self.settings_button.clicked.connect(self.open_settings)
@@ -423,11 +437,6 @@ class VideoWindow(QWidget):
         elif color == "yellow":
             self.wind_status_label.setStyleSheet("background-color: yellow; border-radius: 15;")
 
-    # def closeEvent(self, event):
-    #     time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    #     self.log_df.to_csv(f"{time_now}.csv", index=False)
-    #     event.accept()
-
     def start_video(self):
         self.is_started = True
         self.video_thread.start()
@@ -435,7 +444,7 @@ class VideoWindow(QWidget):
         self.delete_button.setEnabled(True)
 
     def stop_video(self):
-        self.is_started =False
+        self.is_started = False
         self.video_thread.stop()
         self.add_button.setEnabled(False)
         self.delete_button.setEnabled(False)
@@ -445,7 +454,7 @@ class VideoWindow(QWidget):
             if event.button() == Qt.LeftButton:
                 x_ratio = cam_width / self.video_label.width()
                 y_ratio = cam_height / self.video_label.height()
-                
+
                 self.drawing = True
                 self.ix, self.iy = int(event.x() * x_ratio), int(event.y() * y_ratio)
                 self.rx1, self.ry1 = self.ix, self.iy
@@ -478,12 +487,11 @@ class VideoWindow(QWidget):
             return
 
         new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
-        #new_region = (1176,103,1260,163)
-    
+
         for region in self.regions:
-            if (abs(new_region[0] - region[0]) < 5 and 
-                abs(new_region[1] - region[1]) < 5 and 
-                abs(new_region[2] - region[2]) < 5 and 
+            if (abs(new_region[0] - region[0]) < 5 and
+                abs(new_region[1] - region[1]) < 5 and
+                abs(new_region[2] - region[2]) < 5 and
                 abs(new_region[3] - region[3]) < 5):
                 self.info_box.append("Region already added!")
                 return
@@ -492,8 +500,6 @@ class VideoWindow(QWidget):
         self.info_box.append(f"Region added: {new_region}")
 
         self.rx1 = self.rx2 = self.ry1 = self.ry2 = 0
-        # self.update_frame()
-
 
     def delete_region(self):
         if self.regions:
@@ -510,8 +516,7 @@ class VideoWindow(QWidget):
             self.wind_warning_lable.setText(f"Wind: {self.wind_warnings}")
             self.red_warning_lable.setText(f"Red: {self.red_warnings}")
             self.orange_warning_lable.setText(f"Orange: {self.orange_warnings}")
-            # self.update_frame()
-        
+
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
         self.rect_ready = False
 
@@ -533,11 +538,10 @@ class VideoWindow(QWidget):
             self.hexagon_missing_timer_start = None
             self.hexagon_missing_warning_shown = False
 
-
     def update_frame(self, frame):
         elapsed = self.timer.elapsed()
         if elapsed >= 33:  # 33 ms for ~30 FPS
-                
+
             if not self.is_started:
                 return
 
@@ -552,30 +556,22 @@ class VideoWindow(QWidget):
                 y1, y2 = max(0, min(region[1], region[3])), min(cam_height, max(region[1], region[3]))
                 roi = frame[y1:y2, x1:x2]
 
-###################################################################################################
-
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                cv2.imshow("Gray", gray)  # نمایش تصویر خاکستری
+                cv2.imshow("Gray", gray)
 
-                equalized = cv2.equalizeHist(gray) #For Night
-                cv2.imshow("Equalized", equalized)  # نمایش تصویر پس از Equalization
+                equalized = cv2.equalizeHist(gray)
+                cv2.imshow("Equalized", equalized)
 
                 blurred = cv2.GaussianBlur(equalized, (7, 7), 2)
-                cv2.imshow("Blurred Gaussian", blurred)  # نمایش تصویر پس از Gaussian Blur
-
-                # استفاده از Bilateral Filter برای حفظ لبه‌ها و کاهش نویز
-                # blurred_bilateral = cv2.bilateralFilter(blurred, 9, 75, 75)
-                # cv2.imshow("Blurred Bilateral", blurred_bilateral)  # نمایش تصویر پس از Gaussian Blur
+                cv2.imshow("Blurred Gaussian", blurred)
 
                 blurred_median = cv2.medianBlur(blurred, 5)
-                cv2.imshow("Blurred Median", blurred_median)  # نمایش تصویر پس از Median Blur
+                cv2.imshow("Blurred Median", blurred_median)
 
                 thresh = cv2.adaptiveThreshold(blurred_median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
-                cv2.imshow("Threshold", thresh)  # نمایش تصویر پس از آستانه‌گذاری
+                cv2.imshow("Threshold", thresh)
 
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-##########################################################################################################
 
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
                 hexagons_last_centers = []
@@ -619,7 +615,7 @@ class VideoWindow(QWidget):
                         if self.flag_for_find_true_hexagons < self.flag_for_find_true_hexagons_limit:
                             if self.hexagons_last_unique_centers and not check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_movement_sensitivity):
                                 self.flag_for_find_true_hexagons += 1
-                            else: 
+                            else:
                                 self.flag_for_find_true_hexagons = 0
                         else:
                             if len(hexagons_unique_centers) >= self.number_of_hexagons:
@@ -639,7 +635,6 @@ class VideoWindow(QWidget):
                             self.scan_time = self.scan_time_fast
                             self.counter_flag = 0
                         self.check_missing_hexagons(current_time, hexagons_unique_centers)
-
 
                     elif self.state == "fast_scan":
                         self.ex_state = self.state
@@ -699,7 +694,7 @@ class VideoWindow(QWidget):
                     elif self.state == "black":
                         self.info_box.append("!!! Fall Warning !!!")
                         self.update_status("black")
-                    
+
                     elif self.state == "red_calibration":
                         self.warning_red_is_enabled = True
                         self.info_box.append("State: Slow Scan")
