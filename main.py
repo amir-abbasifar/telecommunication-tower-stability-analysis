@@ -1,4 +1,4 @@
-#Connection lost have been handled
+#[ADD] duration in log file
 
 import cv2
 import numpy as np
@@ -10,6 +10,7 @@ from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, QElapsedTimer
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
 import os
+import atexit
 
 def create_log_directory():
     logs_dir = os.path.join(os.getcwd(), "Logs")
@@ -37,16 +38,20 @@ area_limit = 160
 def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
     if len(approx) != 6:
         return False
+
     if not cv2.isContourConvex(approx):
         return False
-    angles = []
+
     side_lengths = []
+    angles = []
     for i in range(6):
         p1 = approx[i][0]
         p2 = approx[(i + 1) % 6][0]
         p3 = approx[(i + 2) % 6][0]
+        
         side_length = np.linalg.norm(p1 - p2)
         side_lengths.append(side_length)
+
         vec1 = p1 - p2
         vec2 = p3 - p2
         cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
@@ -56,12 +61,12 @@ def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
     for angle in angles:
         if angle < 75 or angle > 160:
             return False
-        
+
     side_lengths = np.array(side_lengths)
     mean_length = np.mean(side_lengths)
     if np.any(side_lengths < min_side_length) or np.any(side_lengths > max_side_length):
         return False
-    
+
     length_deviation = np.std(side_lengths)
     if length_deviation > 0.2 * mean_length:
         return False
@@ -388,6 +393,10 @@ class VideoWindow(QWidget):
         self.timer = QElapsedTimer()
         self.timer.start()
 
+        self.start_duration_time = None
+        self.log_file_path = log_file_path
+        atexit.register(self.log_duration)
+
         self.warning_label = QLabel("Warnings:", self)
         self.warning_label.setGeometry(1400, 620, 70, 70)
 
@@ -440,6 +449,7 @@ class VideoWindow(QWidget):
     def start_video(self):
         self.is_started = True
         self.video_thread.start()
+        self.start_duration_time = time.time()
         self.add_button.setEnabled(True)
         self.delete_button.setEnabled(True)
 
@@ -448,6 +458,20 @@ class VideoWindow(QWidget):
         self.video_thread.stop()
         self.add_button.setEnabled(False)
         self.delete_button.setEnabled(False)
+
+    def log_duration(self):
+        if self.start_duration_time is not None:
+            end_time = time.time()
+            duration = int(end_time - self.start_duration_time)
+            duration_str = f"{duration}s"
+
+            if os.path.exists(self.log_file_path):
+                df = pd.read_csv(self.log_file_path)
+            else:
+                df = pd.DataFrame(columns=["Duration"])
+
+            df.loc[0, "Duration"] = duration_str
+            df.to_csv(self.log_file_path, index=False)
 
     def mousePressEvent(self, event):
         if self.is_started:
