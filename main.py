@@ -1,4 +1,4 @@
-#[ADD] wind speed - [CHANGE] states names - log style - stop button - sort x and y
+#[ADD] two methods for show connection error (when Camera/Internet connection lost)
 
 import cv2
 import numpy as np
@@ -12,6 +12,10 @@ from PyQt5.QtGui import QImage, QPixmap
 import os
 import atexit
 import requests
+import threading
+import tkinter as tk
+from tkinter import messagebox
+import sys
 
 wind_speed = 0
 
@@ -35,10 +39,66 @@ log_directory = create_log_directory()
 log_file_path = os.path.join(log_directory, f"hexagon_vertices_{datetime.now().strftime('%H-%M-%S')}.csv")
 
 #cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
-cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
 #cam = cv2.VideoCapture(0)
-cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
-cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+class CameraConnector(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.cam = None
+
+    def run(self):
+        self.cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0', cv2.CAP_FFMPEG)
+        self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'XVID'))
+        self.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self.cam.set(cv2.CAP_PROP_POS_MSEC, 3000)
+
+connector = CameraConnector()
+connector.start()
+connector.join(timeout=10)  # wait for 10 seconds
+
+
+### First Method for show connection error ###
+
+def show_error(message):
+    root = tk.Tk()
+    root.withdraw()
+    ErrorWindow = tk.Toplevel(root)
+    
+    ErrorWindow.title("Camera Connection Error")
+    ErrorWindow.geometry("300x150")
+
+    label = tk.Label(ErrorWindow, text=message, wraplength=250)
+    label.pack(pady=20)
+
+    ok_button = tk.Button(ErrorWindow, text="OK", command=root.destroy)
+    ok_button.pack(pady=10)
+
+    root.mainloop()
+
+if connector.cam is None or not connector.cam.isOpened():
+    show_error("Failed to connect to camera")
+    os._exit(1)
+else:
+    cam = connector.cam
+    try:
+        cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+        cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    except Exception as e:
+        print(f"Error getting camera properties: {e}")
+        cam.release()
+
+### Second Method for show connection error ###
+
+# if connector.cam is None or not connector.cam.isOpened():
+#     messagebox.showerror("Camera Connection", "Failed to connect to camera")
+#     os._exit(1)
+# else:
+#     cam = connector.cam
+#     try:
+#         cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+#         cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     except Exception as e:
+#         print(f"Error getting camera properties: {e}")
+#         cam.release()
 
 threshold_of_fine_unique_pos = 30
 area_limit = 80
@@ -276,7 +336,6 @@ class VideoThread(QThread):
         if self.cam is not None:
             self.cam.release()
         self.wait()
-
 
 class SettingsWindow(QWidget):
     def __init__(self, parent):
@@ -887,6 +946,10 @@ class VideoWindow(QWidget):
 if __name__ == '__main__':
     from threading import Thread
     import sys
+
+    connector = CameraConnector()
+    connector.run()
+
 
     wind_speed_thread = Thread(target=update_wind_speed)
     wind_speed_thread.daemon = True
