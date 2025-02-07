@@ -1,4 +1,4 @@
-#[ADD] duration in log file
+#[CHANGE] log method - [ADD] time & warnings in log file
 
 import cv2
 import numpy as np
@@ -32,8 +32,8 @@ cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonit
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-threshold_of_fine_unique_pos = 200
-area_limit = 160
+threshold_of_fine_unique_pos = 30
+area_limit = 150
 
 def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
     if len(approx) != 6:
@@ -68,7 +68,7 @@ def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
         return False
 
     length_deviation = np.std(side_lengths)
-    if length_deviation > 0.2 * mean_length:
+    if length_deviation > 0.3 * mean_length:
         return False
 
     return True
@@ -77,30 +77,49 @@ def detect_shapes(contours, epsilon_val):
     hexagons = []
     new_data = []
 
+    hexagon_centers = []
+
     for contour in contours:
         epsilon = epsilon_val * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
         if is_approximate_hexagon(approx):
             area = cv2.contourArea(contour)
             if area > area_limit:
-                hexagons.append(contour)
+                M = cv2.moments(contour)
+                if M["m00"] != 0:
+                    cx = int(M["m10"] / M["m00"])
+                    cy = int(M["m01"] / M["m00"])
+                    hexagon_centers.append((cx, cy))
+                    hexagons.append(contour)
 
-                vertices = approx[:, 0, :]
-                hexagon_data = {
-                    '(x1,y1)': f"({vertices[0][0]}, {vertices[0][1]})",
-                    '(x2,y2)': f"({vertices[1][0]}, {vertices[1][1]})",
-                    '(x3,y3)': f"({vertices[2][0]}, {vertices[2][1]})",
-                    '(x4,y4)': f"({vertices[3][0]}, {vertices[3][1]})",
-                    '(x5,y5)': f"({vertices[4][0]}, {vertices[4][1]})",
-                    '(x6,y6)': f"({vertices[5][0]}, {vertices[5][1]})",
-                }
-                new_data.append(hexagon_data)
+    unique_centers = count_unique_positions(hexagon_centers)
+
+    unique_hexagons = []
+    for i, center in enumerate(hexagon_centers):
+        if center in unique_centers:
+            unique_hexagons.append(hexagons[i])
+
+    for i, center in enumerate(unique_centers):
+        contour = unique_hexagons[i]
+        approx = cv2.approxPolyDP(contour, epsilon_val * cv2.arcLength(contour, True), True)
+        
+        vertices = approx[:, 0, :]
+        hexagon_data = {
+            '(x1,y1)': f"({vertices[0][0]}, {vertices[0][1]})",
+            '(x2,y2)': f"({vertices[1][0]}, {vertices[1][1]})",
+            '(x3,y3)': f"({vertices[2][0]}, {vertices[2][1]})",
+            '(x4,y4)': f"({vertices[3][0]}, {vertices[3][1]})",
+            '(x5,y5)': f"({vertices[4][0]}, {vertices[4][1]})",
+            '(x6,y6)': f"({vertices[5][0]}, {vertices[5][1]})",
+            'Center': f"({center[0]}, {center[1]})"
+        }
+        new_data.append(hexagon_data)
 
     if new_data:
         new_df = pd.DataFrame(new_data)
         new_df.to_csv(log_file_path, mode='a', header=not os.path.exists(log_file_path), index=False)
 
-    return hexagons
+    return unique_hexagons
 
 def calculate_distance(p1, p2):
     return np.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
@@ -366,7 +385,7 @@ class VideoWindow(QWidget):
         self.default_number_of_fast_scan = 20
         self.default_flag_for_find_true_hexagons_limit = 4
         self.default_epsilon_value = 0.032
-        self.default_missing_hexagon_threshold = 5
+        self.default_missing_hexagon_threshold = 30
         self.default_threshold_of_movement_sensitivity = 10
         self.default_threshold_of_wind_sensitivity = 7
         self.default_threshold_of_red_sensitivity = 20
@@ -449,7 +468,6 @@ class VideoWindow(QWidget):
     def start_video(self):
         self.is_started = True
         self.video_thread.start()
-        self.start_duration_time = time.time()
         self.add_button.setEnabled(True)
         self.delete_button.setEnabled(True)
 
@@ -465,13 +483,23 @@ class VideoWindow(QWidget):
             duration = int(end_time - self.start_duration_time)
             duration_str = f"{duration}s"
 
+            fps = int(1000/self.elapsed_thresh)
+
             if os.path.exists(self.log_file_path):
                 df = pd.read_csv(self.log_file_path)
             else:
-                df = pd.DataFrame(columns=["Duration"])
+                df = pd.DataFrame()
 
+            df.loc[0, "Start Time"] = datetime.fromtimestamp(self.start_duration_time).strftime("%Y:%m:%d_%H:%M")
+            df.loc[0, "Stop Time"] = datetime.fromtimestamp(end_time).strftime("%Y:%m:%d_%H:%M")
             df.loc[0, "Duration"] = duration_str
+            df.loc[0, "FPS"] = fps
+            df.loc[0, "Red Warning"] = self.red_warnings
+            df.loc[0, "Orange Warning"] = self.orange_warnings
+            df.loc[0, "Wind Warning"] = self.wind_warnings
+
             df.to_csv(self.log_file_path, index=False)
+            
 
     def mousePressEvent(self, event):
         if self.is_started:
@@ -506,6 +534,7 @@ class VideoWindow(QWidget):
                 self.delete_button.setEnabled(True)
 
     def add_region(self):
+        self.start_duration_time = time.time()
         if self.rx1 == self.rx2 or self.ry1 == self.ry2:
             self.info_box.append("No region selected!")
             return
@@ -564,7 +593,8 @@ class VideoWindow(QWidget):
 
     def update_frame(self, frame):
         elapsed = self.timer.elapsed()
-        if elapsed >= 33:  # 33 ms for ~30 FPS
+        self.elapsed_thresh = 1000  # 33 ms for ~30 FPS
+        if elapsed >= self.elapsed_thresh:
 
             if not self.is_started:
                 return
@@ -627,6 +657,8 @@ class VideoWindow(QWidget):
                     if current_time - self.region_last_count_time[region] >= self.scan_time:
                         if check_movement(hexagons_unique_centers, self.hexagons_last_unique_centers, self.threshold_of_wind_sensitivity) and not self.state == "fast_scan" and not self.state == "init":
                             self.wind_status("yellow")
+                            self.wind_warnings = self.wind_warnings + 1
+                            self.wind_warning_lable.setText(f"Wind: {self.wind_warnings}")
                         elif not self.state == "fast_scan":
                             self.wind_status("white")
 
