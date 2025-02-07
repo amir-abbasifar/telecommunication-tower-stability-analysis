@@ -1,4 +1,4 @@
-#[DELETE] is_within_regions function - [DELETE] star detection
+#[ADD] log directory and log vertices - [CHANGE] threshold
 
 import cv2
 import numpy as np
@@ -9,6 +9,21 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplication, QTextEdit, QSlider, QSpinBox, QLineEdit
 from PyQt5.QtGui import QImage, QPixmap
+import os
+
+def create_log_directory():
+    logs_dir = os.path.join(os.getcwd(), "Logs")
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+    
+    today_dir = os.path.join(logs_dir, datetime.now().strftime("%Y-%m-%d"))
+    if not os.path.exists(today_dir):
+        os.makedirs(today_dir)
+    
+    return today_dir
+
+log_directory = create_log_directory()
+log_file_path = os.path.join(log_directory, f"hexagon_vertices_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
 
 #cam = cv2.VideoCapture('rtsp://admin:admin1234@192.168.0.33:554/cam/realmonitor?channel=1&subtype=0')
 cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
@@ -16,11 +31,10 @@ cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonit
 cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
 cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-min_side_length = 2
-threshold_of_fine_unique_pos = 10
-area_limit = 50
+threshold_of_fine_unique_pos = 200
+area_limit = 160
 
-def is_approximate_hexagon(approx):
+def is_approximate_hexagon(approx, min_side_length=13, max_side_length=1000):
     if len(approx) != 6:
         return False
     if not cv2.isContourConvex(approx):
@@ -39,12 +53,19 @@ def is_approximate_hexagon(approx):
         angle = np.arccos(cos_angle) * 180 / np.pi
         angles.append(angle)
     for angle in angles:
-        if angle < 40 or angle > 170:
+        if angle < 75 or angle > 160:
             return False
-    for length in side_lengths:
-        if length < min_side_length:
-            return False
+    side_lengths = np.array(side_lengths)
+    mean_length = np.mean(side_lengths)
+    if np.any(side_lengths < min_side_length) or np.any(side_lengths > max_side_length):
+        return False
+    length_deviation = np.std(side_lengths)
+    if length_deviation > 0.2 * mean_length:
+        return False
+
     return True
+
+data_frame = pd.DataFrame(columns=['(x1,y1)', '(x2,y2)', '(x3,y3)', '(x4,y4)', '(x5,y5)', '(x6,y6)'])
 
 def detect_shapes(contours, epsilon_val):
     hexagons = []
@@ -55,6 +76,23 @@ def detect_shapes(contours, epsilon_val):
             area = cv2.contourArea(contour)
             if area > area_limit:
                 hexagons.append(contour)
+
+                vertices = approx[:, 0, :]
+                hexagon_data = {
+                    '(x1,y1)': f"({vertices[0][0]}, {vertices[0][1]})",
+                    '(x2,y2)': f"({vertices[1][0]}, {vertices[1][1]})",
+                    '(x3,y3)': f"({vertices[2][0]}, {vertices[2][1]})",
+                    '(x4,y4)': f"({vertices[3][0]}, {vertices[3][1]})",
+                    '(x5,y5)': f"({vertices[4][0]}, {vertices[4][1]})",
+                    '(x6,y6)': f"({vertices[5][0]}, {vertices[5][1]})",
+                }
+
+                global data_frame
+                data_frame = data_frame._append(hexagon_data, ignore_index=True)
+
+                if not data_frame.empty:
+                    data_frame.to_csv(log_file_path, mode='a', header=not os.path.exists(log_file_path), index=False)
+                
     return hexagons
 
 def calculate_distance(p1, p2):
@@ -254,6 +292,11 @@ class VideoWindow(QWidget):
 
         #self.log_df = pd.DataFrame(columns=["timestamp", "region", "hexagons"])
 
+        self.vertex_log_df = pd.DataFrame(columns=["timestamp", "region", "hexagon_id", "vertices"])
+        self.log_interval = 1
+        self.last_log_time = time.time()
+
+
         self.scan_time = 1
 
         
@@ -366,7 +409,7 @@ class VideoWindow(QWidget):
 
     def start_video(self):
         self.is_started = True
-        self.timer.start(30)
+        self.timer.start(1)
         self.add_button.setEnabled(True)
         self.delete_button.setEnabled(True)
 
@@ -482,12 +525,34 @@ class VideoWindow(QWidget):
                 roi = frame[y1:y2, x1:x2]
 
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                cv2.imshow("Gray", gray)  # نمایش تصویر خاکستری
+
                 equalized = cv2.equalizeHist(gray) #For Night
-                blurred = cv2.GaussianBlur(equalized, (3, 3), 5)
-                thresh = cv2.adaptiveThreshold(blurred, 150, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
+                cv2.imshow("Equalized", equalized)  # نمایش تصویر پس از Equalization
+
+                blurred = cv2.GaussianBlur(equalized, (7, 7), 1.6)
+                cv2.imshow("Blurred Gaussian", blurred)  # نمایش تصویر پس از Gaussian Blur
+
+                # استفاده از Bilateral Filter برای حفظ لبه‌ها و کاهش نویز
+                # blurred_bilateral = cv2.bilateralFilter(blurred, 9, 75, 75)
+                # cv2.imshow("Blurred Bilateral", blurred_bilateral)  # نمایش تصویر پس از Gaussian Blur
+
+                blurred_median = cv2.medianBlur(blurred, 5)
+                cv2.imshow("Blurred Median", blurred_median)  # نمایش تصویر پس از Median Blur
+
+                thresh = cv2.adaptiveThreshold(blurred_median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 5, 2)
+                cv2.imshow("Threshold", thresh)  # نمایش تصویر پس از آستانه‌گذاری
+
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
+##############################################################################################################################
+
+#################################################################################################################
+
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
+                hexagons_last_centers = []
+
+
 
                 if region not in self.region_last_check_times:
                     self.region_last_check_times[region] = datetime.now()
@@ -498,7 +563,7 @@ class VideoWindow(QWidget):
                 if region not in self.region_hexagon_positions:
                     self.region_hexagon_positions[region] = []
 
-                hexagons_last_centers = []
+                
 
                 for hexagon in detected_hexagons:
                     M = cv2.moments(hexagon)
