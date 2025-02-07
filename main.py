@@ -1,4 +1,4 @@
-#Better detection algorithm
+#[ADD] wind speed - [CHANGE] states names - log style - stop button - sort x and y
 
 import cv2
 import numpy as np
@@ -11,6 +11,14 @@ from PyQt5.QtWidgets import QLabel, QVBoxLayout, QPushButton, QWidget, QApplicat
 from PyQt5.QtGui import QImage, QPixmap
 import os
 import atexit
+import requests
+
+wind_speed = 0
+
+LATITUDE = 34.252016197565254  # NIROOGHARB
+LONGITUDE = 47.02910396696085 # NIROOGHARB
+
+url = f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}&current_weather=true"
 
 def create_log_directory():
     logs_dir = os.path.join(os.getcwd(), "Logs")
@@ -73,6 +81,24 @@ def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
 
     return True
 
+def get_wind_speed():
+    global wind_speed
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        wind_speed = data["current_weather"]["windspeed"]
+    except requests.exceptions.RequestException as e:
+        pass
+
+def update_wind_speed():
+    while True:
+        try:
+            get_wind_speed()
+        except Exception as e:
+            pass
+        time.sleep(60)
+
 def detect_shapes(contours, epsilon_val):
     hexagons = []
     new_data = []
@@ -104,14 +130,84 @@ def detect_shapes(contours, epsilon_val):
         approx = cv2.approxPolyDP(contour, epsilon_val * cv2.arcLength(contour, True), True)
         
         vertices = approx[:, 0, :]
+        # hexagon_data = {
+        #     'x1': f"{vertices[0][0]}",
+        #     'y1': f"{vertices[0][1]}",
+        #     'x2': f"{vertices[1][0]}",
+        #     'y2': f"{vertices[1][1]}",
+        #     'x3': f"{vertices[2][0]}",
+        #     'y3': f"{vertices[2][1]}",
+        #     'x4': f"{vertices[3][0]}",
+        #     'y4': f"{vertices[3][1]}",
+        #     'x5': f"{vertices[4][0]}",
+        #     'y5': f"{vertices[4][1]}",
+        #     'x6': f"{vertices[5][0]}",
+        #     'y6': f"{vertices[5][1]}",
+        #     'Center_x': f"{center[0]}",
+        #     'Center_y': f"{center[1]}",
+        #     'Wind Speed': f"{wind_speed} km/h"
+        # }
+        lowest_x = vertices[0][0]
+        lowest_x_y = vertices[0][1]
+
+        highest_x = vertices[0][0]
+        highest_x_y = vertices[0][1]
+
+        lowest_y = vertices[0][1]
+        lowest_y_x = vertices[0][0]
+
+        highest_y = vertices[0][1]
+        highest_y_x = vertices[0][0]
+        
+
+        for i in range(0,6):
+            if vertices[i][0] < lowest_x: #find lowest x and its y
+                lowest_x = vertices[i][0]
+                lowest_x_y = vertices[i][1]
+
+            if vertices[i][0] > highest_x: #find highest x and its y
+                highest_x = vertices[i][0]
+                highest_x_y = vertices[i][1]
+
+            if vertices[i][1] < lowest_y: #find lowest y and its x
+                lowest_y = vertices[i][1]
+                lowest_y_x = vertices[i][0]
+            
+            if vertices[i][1] > highest_y: #find highest y and its x
+                highest_y = vertices[i][1]
+                highest_y_x = vertices[i][0]
+
+        mid_up_y = vertices[0][0]
+        mid_up_y_x = vertices[0][1]
+
+        mid_down_y = vertices[0][0]
+        mid_down_y_x = vertices[0][1]
+ 
+        for i in range (0,6):
+            if vertices[i][1] != highest_y and vertices[i][1] != lowest_y and vertices[i][1] != lowest_x_y and vertices[i][1] != highest_x_y:
+                if vertices[i][1] > mid_up_y:
+                    mid_up_y = vertices[i][1]
+                    mid_up_y_x = vertices[i][0]
+                if vertices[i][1] < mid_down_y:
+                    mid_down_y = vertices[i][1]
+                    mid_up_y_x = vertices[i][0]
+
         hexagon_data = {
-            '(x1,y1)': f"({vertices[0][0]}, {vertices[0][1]})",
-            '(x2,y2)': f"({vertices[1][0]}, {vertices[1][1]})",
-            '(x3,y3)': f"({vertices[2][0]}, {vertices[2][1]})",
-            '(x4,y4)': f"({vertices[3][0]}, {vertices[3][1]})",
-            '(x5,y5)': f"({vertices[4][0]}, {vertices[4][1]})",
-            '(x6,y6)': f"({vertices[5][0]}, {vertices[5][1]})",
-            'Center': f"({center[0]}, {center[1]})"
+            'x1': f"{lowest_x}",
+            'y1': f"{lowest_x_y}",
+            'x2': f"{highest_y_x}",
+            'y2': f"{highest_y}",
+            'x3': f"{mid_up_y_x}",
+            'y3': f"{mid_up_y}",
+            'x4': f"{highest_x}",
+            'y4': f"{highest_x_y}",
+            'x5': f"{lowest_y_x}",
+            'y5': f"{lowest_y}",
+            'x6': f"{mid_down_y_x}",
+            'y6': f"{mid_down_y}",
+            'Center_x': f"{center[0]}",
+            'Center_y': f"{center[1]}",
+            'Wind Speed': f"{wind_speed} km/h"
         }
         new_data.append(hexagon_data)
 
@@ -166,7 +262,6 @@ class VideoThread(QThread):
             if self.cam is None or not self.cam.isOpened():
                 self.connect_camera()
                 time.sleep(1)  # Wait before retrying
-                continue
 
             ret, frame = self.cam.read()
             if ret:
@@ -181,6 +276,7 @@ class VideoThread(QThread):
         if self.cam is not None:
             self.cam.release()
         self.wait()
+
 
 class SettingsWindow(QWidget):
     def __init__(self, parent):
@@ -369,6 +465,9 @@ class VideoWindow(QWidget):
         self.wind_status_label.setGeometry(1490, 575, 30, 30)
         self.wind_status("white")
 
+        self.wind_speed_lable = QLabel(f"Wind Speed: {wind_speed} km/h", self)
+        self.wind_speed_lable.setGeometry(1400, 585, 130, 80)
+
         self.state = "init"
         self.flag_for_find_true_hexagons = 0
         self.hexagons_last_unique_centers = []
@@ -419,10 +518,10 @@ class VideoWindow(QWidget):
         self.warning_label = QLabel("Warnings:", self)
         self.warning_label.setGeometry(1400, 620, 70, 70)
 
-        self.red_warning_lable = QLabel(f"Red: {self.red_warnings}", self)
+        self.red_warning_lable = QLabel(f"Moved: {self.red_warnings}", self)
         self.red_warning_lable.setGeometry(1480, 640, 80, 80)
-        self.orange_warning_lable = QLabel(f"Orange: {self.orange_warnings}", self)
-        self.orange_warning_lable.setGeometry(1480, 660, 80, 80)
+        self.orange_warning_lable = QLabel(f"Not detected: {self.orange_warnings}", self)
+        self.orange_warning_lable.setGeometry(1480, 660, 120, 80)
         self.wind_warning_lable = QLabel(f"Wind: {self.wind_warnings}", self)
         self.wind_warning_lable.setGeometry(1480, 680, 80, 80)
 
@@ -446,16 +545,12 @@ class VideoWindow(QWidget):
     def update_status(self, color):
         if color == "green":
             self.status_label.setStyleSheet("background-color: green; border-radius: 25px;")
-        elif color == "yellow":
-            self.status_label.setStyleSheet("background-color: yellow; border-radius: 25px;")
         elif color == "red":
             self.status_label.setStyleSheet("background-color: red; border-radius: 25px;")
         elif color == "white":
             self.status_label.setStyleSheet("background-color: white; border-radius: 25px;")
         elif color == "orange":
             self.status_label.setStyleSheet("background-color: rgb(255,165,0); border-radius: 25px;")
-        elif color == "crimson":
-            self.status_label.setStyleSheet("background-color: rgb(153,0,0); border-radius: 25px;")
         elif color == "black":
             self.status_label.setStyleSheet("background-color: rgb(0,0,0); border-radius: 25px;")
 
@@ -472,8 +567,11 @@ class VideoWindow(QWidget):
         self.delete_button.setEnabled(True)
 
     def stop_video(self):
-        self.is_started = False
-        self.video_thread.stop()
+        self.log_duration()
+        global log_file_path
+        log_file_path = os.path.join(log_directory, f"hexagon_vertices_{datetime.now().strftime('%H-%M-%S')}.csv")
+        self.log_file_path = log_file_path
+        self.start_duration_time = time.time()
         self.add_button.setEnabled(False)
         self.delete_button.setEnabled(False)
 
@@ -494,8 +592,8 @@ class VideoWindow(QWidget):
             df.loc[0, "Stop Time"] = datetime.fromtimestamp(end_time).strftime("%Y:%m:%d_%H:%M")
             df.loc[0, "Duration"] = duration_str
             df.loc[0, "FPS"] = fps
-            df.loc[0, "Red Warning"] = self.red_warnings
-            df.loc[0, "Orange Warning"] = self.orange_warnings
+            df.loc[0, "Moved Warning"] = self.red_warnings
+            df.loc[0, "Not detected Warning"] = self.orange_warnings
             df.loc[0, "Wind Warning"] = self.wind_warnings
 
             df.to_csv(self.log_file_path, index=False)
@@ -567,8 +665,8 @@ class VideoWindow(QWidget):
             self.wind_warnings = 0
             self.orange_warnings = 0
             self.wind_warning_lable.setText(f"Wind: {self.wind_warnings}")
-            self.red_warning_lable.setText(f"Red: {self.red_warnings}")
-            self.orange_warning_lable.setText(f"Orange: {self.orange_warnings}")
+            self.red_warning_lable.setText(f"Moved: {self.red_warnings}")
+            self.orange_warning_lable.setText(f"Not detected: {self.orange_warnings}")
 
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
         self.rect_ready = False
@@ -586,7 +684,7 @@ class VideoWindow(QWidget):
                     self.info_box.append("State: Orange")
                     self.state = "orange"
                     self.orange_warnings += 1
-                    self.orange_warning_lable.setText(f"Orange: {self.orange_warnings}")
+                    self.orange_warning_lable.setText(f"Not detected: {self.orange_warnings}")
         else:
             self.hexagon_missing_timer_start = None
             self.hexagon_missing_warning_shown = False
@@ -595,6 +693,8 @@ class VideoWindow(QWidget):
         elapsed = self.timer.elapsed()
         self.elapsed_thresh = 1000  # 33 ms for ~30 FPS
         if elapsed >= self.elapsed_thresh:
+
+            self.wind_speed_lable.setText(f"Wind Speed: {wind_speed}")
 
             if not self.is_started:
                 return
@@ -613,7 +713,7 @@ class VideoWindow(QWidget):
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
                 cv2.imshow("Gray", gray)
 
-                gamma = 1.5
+                gamma = 1.5  # تنظیم این مقدار بر اساس شرایط نور (مقادیر > 1 روشنایی را افزایش میدهند)
                 lookup_table = np.array([((i / 255.0) ** (1 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
                 gamma_corrected = cv2.LUT(gray, lookup_table)
                 cv2.imshow("Gamma Corrected", gamma_corrected)
@@ -624,19 +724,20 @@ class VideoWindow(QWidget):
                 blurred_median = cv2.medianBlur(blurred, 5)
                 cv2.imshow("Blurred Median", blurred_median)
 
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                # 2. استفاده از CLAHE به جای هیستوگرام اکولایزیشن معمولی
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
                 equalized2 = clahe.apply(blurred_median)
                 cv2.imshow("CLAHE", equalized2)
 
                 equalized = cv2.equalizeHist(equalized2)
                 cv2.imshow("Equalized", equalized)
 
-
-                thresh = cv2.adaptiveThreshold(blurred_median, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
+                thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
                 cv2.imshow("Threshold", thresh)
 
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
+                # فیلتر کردن کانتورهای کوچک
                 #contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 50]
 
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
@@ -727,7 +828,7 @@ class VideoWindow(QWidget):
                             self.update_status("red")
                             self.state = "red_calibration"
                             self.red_warnings += 1
-                            self.red_warning_lable.setText(f"Red: {self.red_warnings}")
+                            self.red_warning_lable.setText(f"Moved: {self.red_warnings}")
                             self.info_box.append("Warning: Hexagons moved.")
                             self.info_box.append("State: Red")
 
@@ -784,7 +885,13 @@ class VideoWindow(QWidget):
             self.timer.restart()
 
 if __name__ == '__main__':
+    from threading import Thread
     import sys
+
+    wind_speed_thread = Thread(target=update_wind_speed)
+    wind_speed_thread.daemon = True
+    wind_speed_thread.start()
+
     app = QApplication(sys.argv)
     window = VideoWindow()
     window.show()
