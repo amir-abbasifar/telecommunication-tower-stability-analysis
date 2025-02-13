@@ -38,8 +38,6 @@
 # the safety and reliability of telecommunication infrastructure.
 #-----------------------------------------------------------
 
-#[ADD] title and description for functions
-
 # Import necessary libraries
 import cv2
 import numpy as np
@@ -57,8 +55,14 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-# Global variable to store wind speed
+# Debug Mode
+debug = False
+
+# Global variables
 wind_speed = 0
+threshold_of_fine_unique_pos = 30
+area_limit = 80
+frame_rate_threshold = 33  # 33 ms for ~30 FPS
 
 # Coordinates for the specific location
 LATITUDE = 34.252016197565254  # NirooGharb
@@ -145,8 +149,56 @@ else:
 #         print(f"Error getting camera properties: {e}")
 #         cam.release()
 
-threshold_of_fine_unique_pos = 30
-area_limit = 80
+def enhance_image(roi, debug):
+    """
+    Enhances the ROI (Region of Interest) for better processing and detection.
+    
+    Args:
+        roi (numpy.ndarray): The region of interest from the frame.
+        debug (bool): If True, shows intermediate images for debugging.
+    
+    Returns:
+        numpy.ndarray: The enhanced and thresholded image ready for further processing.
+    """
+    # Convert to grayscale
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    if debug:
+        cv2.imshow("Gray", gray)
+
+    # Apply gamma correction
+    gamma = 1.5  # Gamma correction factor
+    lookup_table = np.array([((i / 255.0) ** (1 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    gamma_corrected = cv2.LUT(gray, lookup_table)
+    if debug:
+        cv2.imshow("Gamma Corrected", gamma_corrected)
+
+    # Apply Gaussian blur
+    blurred = cv2.GaussianBlur(gamma_corrected, (7, 7), 1.5)
+    if debug:
+        cv2.imshow("Blurred Gaussian", blurred)
+
+    # Apply median blur
+    blurred_median = cv2.medianBlur(blurred, 5)
+    if debug:
+        cv2.imshow("Blurred Median", blurred_median)
+
+    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+    equalized2 = clahe.apply(blurred_median)
+    if debug:
+        cv2.imshow("CLAHE", equalized2)
+
+    # Apply histogram equalization
+    equalized = cv2.equalizeHist(equalized2)
+    if debug:
+        cv2.imshow("Equalized", equalized)
+
+    # Apply adaptive thresholding
+    thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
+    if debug:
+        cv2.imshow("Threshold", thresh)
+
+    return thresh
 
 def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
     """Checks if the given contour is an approximate hexagon.
@@ -594,23 +646,10 @@ class VideoWindow(QWidget):
         self.ix, self.iy = -1, -1
         self.rx1, self.ry1, self.rx2, self.ry2 = 0, 0, 0, 0
 
-        self.last_check_time = datetime.now()
-        self.last_detected_time = datetime.now()
         self.rect_ready = False
-
-        self.region_last_check_times = {}
-        self.region_hexagon_positions = {}
-        self.region_last_detected_times = {}
-        self.region_last_alarm_times = {}
-        self.region_last_count_time = {}
-
         self.is_started = False
 
-        self.vertex_log_df = pd.DataFrame(columns=["timestamp", "region", "hexagon_id", "vertices"])
-        self.log_interval = 1
-        self.last_log_time = time.time()
-
-        self.scan_time = 1
+        self.elapsed_thresh = frame_rate_threshold
 
         self.status_label = QLabel("Status:", self)
         self.status_label.setGeometry(1400, 500, 50, 50)
@@ -890,7 +929,6 @@ class VideoWindow(QWidget):
             frame: Current video frame.
         """
         elapsed = self.timer.elapsed()
-        self.elapsed_thresh = 33  # 33 ms for ~30 FPS
         if elapsed >= self.elapsed_thresh:
 
             self.wind_speed_label.setText(f"Wind Speed: {wind_speed}")
@@ -909,31 +947,9 @@ class VideoWindow(QWidget):
                 y1, y2 = max(0, min(region[1], region[3])), min(cam_height, max(region[1], region[3]))
                 roi = frame[y1:y2, x1:x2]
 
-                gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                cv2.imshow("Gray", gray)  # Uncomment for debugging
+                enhanced_image = enhance_image(roi)
 
-                gamma = 1.5  # Gamma correction factor
-                lookup_table = np.array([((i / 255.0) ** (1 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
-                gamma_corrected = cv2.LUT(gray, lookup_table)
-                cv2.imshow("Gamma Corrected", gamma_corrected)  # Uncomment for debugging
-
-                blurred = cv2.GaussianBlur(gamma_corrected, (7, 7), 1.5)
-                cv2.imshow("Blurred Gaussian", blurred)  # Uncomment for debugging
-
-                blurred_median = cv2.medianBlur(blurred, 5)
-                cv2.imshow("Blurred Median", blurred_median)  # Uncomment for debugging
-
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-                equalized2 = clahe.apply(blurred_median)
-                cv2.imshow("CLAHE", equalized2)  # Uncomment for debugging
-
-                equalized = cv2.equalizeHist(equalized2)
-                cv2.imshow("Equalized", equalized)  # Uncomment for debugging
-
-                thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
-                cv2.imshow("Threshold", thresh)  # Uncomment for debugging
-
-                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+                contours, hierarchy = cv2.findContours(enhanced_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
                 hexagons_last_centers = []
