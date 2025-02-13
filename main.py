@@ -56,13 +56,13 @@ import tkinter as tk
 from tkinter import messagebox
 
 # Debug Mode
-debug = False
+debug = True
 
 # Global variables
 wind_speed = 0
 threshold_of_fine_unique_pos = 30
 area_limit = 80
-frame_rate_threshold = 33  # 33 ms for ~30 FPS
+frame_rate_threshold = 33  # 33 ms for ~30 FPS - 1000 ms for 1 FPS
 
 # Coordinates for the specific location
 LATITUDE = 34.252016197565254  # NirooGharb
@@ -71,8 +71,18 @@ LONGITUDE = 47.02910396696085  # NirooGharb
 # API endpoint for fetching weather data
 url = f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}&current_weather=true"
 
-def create_log_directory():
-    """Creates a directory for logs with today's date."""
+# Camera URL
+camera_url = 'rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0'
+#camera_url = 'rtsp://admin:admin1234@172.16.90.232:554/cam/realmonitor?channel=1&subtype=0'
+
+def setup_logging():
+    """
+    Sets up the logging directory and returns the log file path.
+    
+    Returns:
+        log_file_path: The path to the log file.
+    """
+
     logs_dir = os.path.join(os.getcwd(), "Logs")
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
@@ -80,34 +90,12 @@ def create_log_directory():
     today_dir = os.path.join(logs_dir, datetime.now().strftime("%Y-%m-%d"))
     if not os.path.exists(today_dir):
         os.makedirs(today_dir)
-    
-    return today_dir
 
-log_directory = create_log_directory()
-log_file_path = os.path.join(log_directory, f"hexagon_vertices_{datetime.now().strftime('%H-%M-%S')}.csv")
-
-class CameraConnector(threading.Thread):
-    """Thread to handle camera connection."""
-    def __init__(self):
-        super().__init__()
-        self.cam = None
-
-    def run(self):
-        """Attempts to open the camera connection."""
-        #self.cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
-        self.cam = cv2.VideoCapture('rtsp://admin:admin1234@172.16.90.232:554/cam/realmonitor?channel=1&subtype=0')
-        
-        self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'XVID'))
-        self.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Disable buffering
-        self.cam.set(cv2.CAP_PROP_POS_MSEC, 3000)  # Set timeout to 3 seconds
-
-connector = CameraConnector()
-connector.start()
-connector.join(timeout=10)  # wait for 10 seconds
-
-### First Method for show connection error ###
+    log_file_path = os.path.join(today_dir, f"hexagon_vertices_{datetime.now().strftime('%H-%M-%S')}.csv")
+    return log_file_path
 
 def show_error(message):
+    """Displays an error message in a Tkinter window."""
     root = tk.Tk()
     root.withdraw()
     ErrorWindow = tk.Toplevel(root)
@@ -122,32 +110,6 @@ def show_error(message):
     ok_button.pack(pady=10)
 
     root.mainloop()
-
-if connector.cam is None or not connector.cam.isOpened():
-    show_error("Failed to connect to camera")
-    os._exit(1)
-else:
-    cam = connector.cam
-    try:
-        cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
-        cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    except Exception as e:
-        print(f"Error getting camera properties: {e}")
-        cam.release()
-
-### Second Method for show connection error ###
-
-# if connector.cam is None or not connector.cam.isOpened():
-#     messagebox.showerror("Camera Connection", "Failed to connect to camera")
-#     os._exit(1)
-# else:
-#     cam = connector.cam
-#     try:
-#         cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
-#         cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
-#     except Exception as e:
-#         print(f"Error getting camera properties: {e}")
-#         cam.release()
 
 def enhance_image(roi, debug):
     """
@@ -183,15 +145,15 @@ def enhance_image(roi, debug):
         cv2.imshow("Blurred Median", blurred_median)
 
     # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-    equalized2 = clahe.apply(blurred_median)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(6, 6))
+    equalized = clahe.apply(blurred_median)
     if debug:
-        cv2.imshow("CLAHE", equalized2)
+        cv2.imshow("CLAHE", equalized)
 
     # Apply histogram equalization
-    equalized = cv2.equalizeHist(equalized2)
-    if debug:
-        cv2.imshow("Equalized", equalized)
+    # equalized2 = cv2.equalizeHist(equalized)
+    # if debug:
+    #     cv2.imshow("Equalized", equalized2)
 
     # Apply adaptive thresholding
     thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
@@ -200,7 +162,7 @@ def enhance_image(roi, debug):
 
     return thresh
 
-def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
+def is_approximate_hexagon(approx, min_side_length=11, max_side_length=1000):
     """Checks if the given contour is an approximate hexagon.
     
     Args:
@@ -234,7 +196,7 @@ def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
         angles.append(angle)
 
     for angle in angles:
-        if angle < 50 or angle > 180:
+        if angle < 60 or angle > 170:
             return False
 
     side_lengths = np.array(side_lengths)
@@ -243,37 +205,31 @@ def is_approximate_hexagon(approx, min_side_length=9, max_side_length=1000):
         return False
 
     length_deviation = np.std(side_lengths)
-    if length_deviation > 0.3 * mean_length:
+    if length_deviation > 0.25 * mean_length:
         return False
 
     return True
 
-def get_wind_speed():
-    """Fetches the current wind speed from the Open-Meteo API."""
-    global wind_speed
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        wind_speed = data["current_weather"]["windspeed"]
-    except requests.exceptions.RequestException as e:
-        pass
-
 def update_wind_speed():
     """Continuously updates the wind speed every 60 seconds."""
+    global wind_speed
     while True:
         try:
-            get_wind_speed()
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            wind_speed = data["current_weather"]["windspeed"]
         except Exception as e:
             pass
         time.sleep(60)
 
-def detect_shapes(contours, epsilon_val):
+def detect_shapes(contours, epsilon_val, log_file_path):
     """Detects hexagons from the list of contours.
     
     Args:
         contours: List of contours.
         epsilon_val: Epsilon value for contour approximation.
+        log_file_path: Path of log
     
     Returns:
         List of detected hexagons.
@@ -450,6 +406,47 @@ def count_unique_positions(centers):
             unique_centers.append(center)
     return unique_centers
 
+class CameraConnector(threading.Thread):
+    """Thread to handle camera connection and initialization."""
+    def __init__(self, camera_url):
+        super().__init__()
+        self.camera_url = camera_url  # URL دوربین
+        self.cam = None
+        self.cam_width = None
+        self.cam_height = None
+
+    def run(self):
+        """Attempts to open the camera connection using the provided URL."""
+        self.cam = cv2.VideoCapture(self.camera_url)
+        self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'XVID'))
+        self.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Disable buffering
+        self.cam.set(cv2.CAP_PROP_POS_MSEC, 3000)  # Set timeout to 3 seconds
+
+    def initialize(self):
+        """
+        Initializes the camera connection and retrieves its properties.
+        
+        Returns:
+            cam: The camera object.
+            cam_width: Width of the camera frame.
+            cam_height: Height of the camera frame.
+        """
+        self.start()
+        self.join(timeout=10)  # Wait for 10 seconds
+
+        if self.cam is None or not self.cam.isOpened():
+            show_error("Failed to connect to camera")
+            os._exit(1)
+        else:
+            try:
+                self.cam_width = int(self.cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self.cam_height = int(self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                return self.cam, self.cam_width, self.cam_height
+            except Exception as e:
+                print(f"Error getting camera properties: {e}")
+                self.cam.release()
+                os._exit(1)
+
 class VideoThread(QThread):
     """Thread to handle video frame fetching."""
     change_pixmap_signal = pyqtSignal(np.ndarray)
@@ -605,8 +602,13 @@ class SettingsWindow(QWidget):
 class VideoWindow(QWidget):
     """Main application window for video processing and interaction."""
     
-    def __init__(self):
+    def __init__(self, cam, cam_width, cam_height, log_file_path):
         super().__init__()
+        self.cam = cam
+        self.cam_width = cam_width
+        self.cam_height = cam_height
+        self.log_file_path = log_file_path
+
         self.setWindowTitle("Shape Detector")
         self.setGeometry(20, 50, 1920, 1080)
 
@@ -648,6 +650,9 @@ class VideoWindow(QWidget):
 
         self.rect_ready = False
         self.is_started = False
+
+        self.region_last_count_time = {}
+        self.scan_time = 1
 
         self.elapsed_thresh = frame_rate_threshold
 
@@ -775,9 +780,7 @@ class VideoWindow(QWidget):
     def stop_video(self):
         """Stops the video processing thread and logs the duration."""
         self.log_duration()
-        global log_file_path
-        log_file_path = os.path.join(log_directory, f"hexagon_vertices_{datetime.now().strftime('%H-%M-%S')}.csv")
-        self.log_file_path = log_file_path
+        self.log_file_path = setup_logging()
         self.start_duration_time = time.time()
         self.add_region_button.setEnabled(False)
         self.delete_region_button.setEnabled(False)
@@ -817,8 +820,8 @@ class VideoWindow(QWidget):
         """
         if self.is_started:
             if event.button() == Qt.LeftButton:
-                x_ratio = cam_width / self.video_label.width()
-                y_ratio = cam_height / self.video_label.height()
+                x_ratio = self.cam_width / self.video_label.width()
+                y_ratio = self.cam_height / self.video_label.height()
 
                 self.drawing = True
                 self.ix, self.iy = int(event.x() * x_ratio), int(event.y() * y_ratio)
@@ -834,8 +837,8 @@ class VideoWindow(QWidget):
         """
         if self.is_started:
             if self.drawing:
-                x_ratio = cam_width / self.video_label.width()
-                y_ratio = cam_height / self.video_label.height()
+                x_ratio = self.cam_width / self.video_label.width()
+                y_ratio = self.cam_height / self.video_label.height()
 
                 self.rx2, self.ry2 = int(event.x() * x_ratio), int(event.y() * y_ratio)
                 self.rect_ready = True
@@ -848,8 +851,8 @@ class VideoWindow(QWidget):
         """
         if self.is_started:
             if event.button() == Qt.LeftButton:
-                x_ratio = cam_width / self.video_label.width()
-                y_ratio = cam_height / self.video_label.height()
+                x_ratio = self.cam_width / self.video_label.width()
+                y_ratio = self.cam_height / self.video_label.height()
 
                 self.drawing = False
                 self.rx2, self.ry2 = int(event.x() * x_ratio), int(event.y() * y_ratio)
@@ -863,7 +866,7 @@ class VideoWindow(QWidget):
             self.info_box.append("No region selected!")
             return
 
-        new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(cam_width, max(self.rx1, self.rx2)), min(cam_height, max(self.ry1, self.ry2)))
+        new_region = (max(0, min(self.rx1, self.rx2)), max(0, min(self.ry1, self.ry2)), min(self.cam_width, max(self.rx1, self.rx2)), min(self.cam_height, max(self.ry1, self.ry2)))
 
         for region in self.regions:
             if (abs(new_region[0] - region[0]) < 5 and
@@ -943,15 +946,15 @@ class VideoWindow(QWidget):
                 cv2.putText(frame, text, (self.rx1, self.ry1 - 10), font, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
             for region in self.regions:
-                x1, x2 = max(0, min(region[0], region[2])), min(cam_width, max(region[0], region[2]))
-                y1, y2 = max(0, min(region[1], region[3])), min(cam_height, max(region[1], region[3]))
+                x1, x2 = max(0, min(region[0], region[2])), min(self.cam_width, max(region[0], region[2]))
+                y1, y2 = max(0, min(region[1], region[3])), min(self.cam_height, max(region[1], region[3]))
                 roi = frame[y1:y2, x1:x2]
 
-                enhanced_image = enhance_image(roi)
+                enhanced_image = enhance_image(roi, debug)
 
                 contours, hierarchy = cv2.findContours(enhanced_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
-                detected_hexagons = detect_shapes(contours, self.epsilon_value)
+                detected_hexagons = detect_shapes(contours, self.epsilon_value, self.log_file_path)
                 hexagons_last_centers = []
 
                 for hexagon in detected_hexagons:
@@ -1089,16 +1092,16 @@ class VideoWindow(QWidget):
 
 if __name__ == '__main__':
     import sys
+    
+    # Initialize camera
+    connector = CameraConnector(camera_url)
+    cam, cam_width, cam_height = connector.initialize()
 
-    connector = CameraConnector()
-    connector.start()
-    connector.join(timeout=10)
+    # Set up logging
+    log_file_path = setup_logging()
 
-    wind_speed_thread = threading.Thread(target=update_wind_speed)
-    wind_speed_thread.daemon = True
-    wind_speed_thread.start()
-
+    # Start the main application
     app = QApplication(sys.argv)
-    window = VideoWindow()
+    window = VideoWindow(cam, cam_width, cam_height, log_file_path)
     window.show()
     sys.exit(app.exec_())
