@@ -1,4 +1,4 @@
-# Hexagon Shape Detector with Wind Speed Monitoring
+# Telecommunication Tower Stability Analysis Using Computer Vision
 
 ## Author
 
@@ -8,42 +8,82 @@ Email: [amirhosseinabbasifar@gmail.com](mailto:amirhosseinabbasifar@gmail.com)
 
 Company: Nader Niroo Gharb Razi
 
----
+## Project Overview
 
-## Description
+This project focuses on the stability analysis of telecommunication towers to identify structural issues and potential instabilities. Utilizing computer vision and integrating various sensors, this system aims to provide a comprehensive assessment of tower conditions.
 
-This application is designed to monitor a live video feed for hexagonal shapes and log their positions along with wind speed data. It employs OpenCV for image processing and PyQt5 for the graphical user interface. The application can detect hexagons, track their movements, and log warnings if there is significant movement or fewer hexagons than expected.
+## Project Stages
 
-## Features
+### 1. Problem Analysis and Objectives
 
-- **Hexagon Detection**: Utilizes contour detection and approximation to identify hexagons.
-- **Wind Speed Monitoring**: Fetches wind speed data from an online API.
-- **Region of Interest (ROI)**: Users can define regions to track hexagons.
-- **State Management**: Manages various states such as slow scan, fast scan, decision, and calibration.
-- **Logging**: Records critical data including positions, timestamps, and warnings.
+- Analyze the stability of telecommunication towers to detect potential structural problems and instabilities.
+- Implement computer vision techniques alongside multiple sensors to assess the tower's condition effectively.
 
-## Usage
+### 2. Data Collection
 
-1. Ensure all dependencies are installed:
-   - OpenCV
-   - PyQt5
-   - pandas
-   - requests
-   - numpy
-2. Run the script to start video processing and monitoring.
+- Gather data through cameras and various sensors including:
+  - **Gyroscope Sensors**: To measure changes in orientation.
+  - **Accelerometers**: For detecting movement and vibrations.
+  - **Anemometers**: To measure wind speed.
+  - **Pressure/Force Sensors**: To detect external stresses on the tower.
+- Combine the data from sensors with images for a more precise analysis.
 
-## Dependencies
+### 3. Image Processing and Feature Detection
 
-You can install the required packages using pip:
+- Apply preprocessing techniques to enhance image quality (noise reduction, contrast enhancement).
+- Identify and extract significant features from images, such as edges and lines.
+- Conduct comparative analyses of images taken at different times to monitor changes.
 
-```bash
-pip install opencv-python PyQt5 pandas requests numpy
-```
+### 4. Data Integration
 
-## Clone the Repository
+- Achieve a detailed assessment of tower conditions by merging data from various sensors and images.
+- For example, correlate angular changes detected by the gyroscope with data from wind sensors, laser leveling, and images to identify signs of structural instability.
 
-To clone this repository, you can use the following command:
+## Output
 
-```bash
-git clone https://github.com/Amirabs0/Hexagon_Detection
-```
+The outcome is a sophisticated software and hardware system capable of analyzing both visual and sensor data to detect potential structural problems and instabilities in telecommunication towers. The system aims to improve the safety and reliability of telecommunication infrastructure significantly.
+
+## Installation and Running the Application
+
+### Prerequisites
+
+- Python version 3.x
+- Required libraries:
+  - OpenCV
+  - NumPy
+  - Pandas
+  - Requests
+  - PyQt5
+
+### Setup Instructions
+
+pip install opencv-python numpy pandas requests PyQt5
+
+1. Clone the repository:
+
+   ```
+   git clone https://github.com/yourusername/telecommunication-tower-stability-analysis.git
+   ```
+2. Navigate to the project directory:
+
+   ```
+   cd telecommunication-tower-stability-analysispython main.py
+   ```
+3. Install the required dependencies (if using pip):
+
+   ```
+   pip install opencv-python numpy pandas requests PyQt5
+   ```
+4. Run the application:
+
+   ```
+   python main.py
+   ```
+
+### Contribution
+
+If you wish to contribute to this project, please fork the repository and submit a pull request. Any improvements or suggestions are highly appreciated!
+
+### Contact
+
+For inquiries or support, please reach out to Amirhossein Abbasifar at amirhosseinabbasifar@gmail.com.

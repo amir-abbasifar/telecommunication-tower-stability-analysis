@@ -1,5 +1,5 @@
 #-----------------------------------------------------------
-# Title: Hexagon Shape Detector with Wind Speed Monitoring
+# Title: Telecommunication Tower Stability Analysis Using Computer Vision
 # Author: Amirhossein Abbasifar
 # Email: amirhosseinabbasifar@gmail.com
 # Company: Nader Niroo Gharb Razi
@@ -8,23 +8,34 @@
 #-----------------------------------------------------------
 #
 # Description:
-# This application is designed to monitor a live video feed for hexagonal shapes and log their positions along with wind speed data.
-# It uses OpenCV for image processing and PyQt5 for the graphical user interface. The application can detect hexagons, track their movements,
-# and log warnings if there is significant movement or fewer hexagons than expected.
+# This project aims at analyzing the stability of telecommunication towers to identify potential structural problems and instabilities. 
+# Utilizing advanced computer vision techniques in conjunction with various sensors, the system provides a comprehensive analysis 
+# of the tower's state. The methodology includes several key stages:
 #
-# Features:
-# - Hexagon Detection: Uses contour detection and approximation to find hexagons.
-# - Wind Speed Monitoring: Fetches wind speed data from an online API.
-# - Region of Interest (ROI): Allows users to define regions for tracking hexagons.
-# - State Management: Manages states such as slow scan, fast scan, decision, and calibration.
-# - Logging: Logs critical data including positions, timestamps, and warnings.
+# 1. Problem Analysis and Objectives: Assessing the structural integrity of telecommunication towers to identify and flag 
+#    issues related to stability. This involves the integration of computer vision and data from multiple sensors for effective monitoring.
 #
-# Usage:
-# 1. Ensure all dependencies are installed (OpenCV, PyQt5, pandas, requests, numpy).
-# 2. Run the script to start the video processing and monitoring.
+# 2. Data Collection: Gathering data through the use of cameras and supplementary sensors such as:
+#    - Gyroscope sensors for measuring orientation changes.
+#    - Accelerometers for detecting movement and vibrations.
+#    - Anemometers for wind speed measurement.
+#    - Pressure or force sensors to detect external stresses on the tower.
+#    This multisensory data, combined with visual data, allows for a more accurate assessment of the tower's condition.
 #
-# Contact:
-# For any questions or support, please contact Amirhossein Abbasifar at amirhosseinabbasifar@gmail.com.
+# 3. Image Processing and Feature Detection: 
+#    - Implementing preprocessing techniques to enhance image quality (i.e., noise reduction, contrast enhancement).
+#    - Identifying and extracting essential features from images, such as edges and lines.
+#    - Conducting comparative analysis of images taken at different time intervals to identify any changes or trends.
+#
+# 4. Data Integration: By merging data from various sensors with images, a more detailed assessment of tower conditions can be achieved. 
+#    For instance, correlating angle changes detected by the gyroscope with wind sensor data and laser leveling readings can indicate 
+#    structural instabilities.
+#
+# Output:
+# The outcome of this project is a sophisticated system designed to analyze the stability of telecommunication towers. 
+# This software and hardware solution is capable of interpreting both visual and sensor data, effectively identifying 
+# structural issues and potential instabilities. By utilizing real-time data and advanced analytics, the system aims to enhance 
+# the safety and reliability of telecommunication infrastructure.
 #-----------------------------------------------------------
 
 #[ADD] title and description for functions
@@ -79,7 +90,9 @@ class CameraConnector(threading.Thread):
 
     def run(self):
         """Attempts to open the camera connection."""
-        self.cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0', cv2.CAP_FFMPEG)
+        #self.cam = cv2.VideoCapture('rtsp://admin:admin1234@91.92.231.159:39735/cam/realmonitor?channel=1&subtype=0')
+        self.cam = cv2.VideoCapture('rtsp://admin:admin1234@172.16.90.232:554/cam/realmonitor?channel=1&subtype=0')
+        
         self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'XVID'))
         self.cam.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Disable buffering
         self.cam.set(cv2.CAP_PROP_POS_MSEC, 3000)  # Set timeout to 3 seconds
@@ -877,7 +890,7 @@ class VideoWindow(QWidget):
             frame: Current video frame.
         """
         elapsed = self.timer.elapsed()
-        self.elapsed_thresh = 1000  # 33 ms for ~30 FPS
+        self.elapsed_thresh = 33  # 33 ms for ~30 FPS
         if elapsed >= self.elapsed_thresh:
 
             self.wind_speed_label.setText(f"Wind Speed: {wind_speed}")
@@ -897,42 +910,33 @@ class VideoWindow(QWidget):
                 roi = frame[y1:y2, x1:x2]
 
                 gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                # cv2.imshow("Gray", gray)  # Uncomment for debugging
+                cv2.imshow("Gray", gray)  # Uncomment for debugging
 
                 gamma = 1.5  # Gamma correction factor
                 lookup_table = np.array([((i / 255.0) ** (1 / gamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
                 gamma_corrected = cv2.LUT(gray, lookup_table)
-                # cv2.imshow("Gamma Corrected", gamma_corrected)  # Uncomment for debugging
+                cv2.imshow("Gamma Corrected", gamma_corrected)  # Uncomment for debugging
 
                 blurred = cv2.GaussianBlur(gamma_corrected, (7, 7), 1.5)
-                # cv2.imshow("Blurred Gaussian", blurred)  # Uncomment for debugging
+                cv2.imshow("Blurred Gaussian", blurred)  # Uncomment for debugging
 
                 blurred_median = cv2.medianBlur(blurred, 5)
-                # cv2.imshow("Blurred Median", blurred_median)  # Uncomment for debugging
+                cv2.imshow("Blurred Median", blurred_median)  # Uncomment for debugging
 
                 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
                 equalized2 = clahe.apply(blurred_median)
-                # cv2.imshow("CLAHE", equalized2)  # Uncomment for debugging
+                cv2.imshow("CLAHE", equalized2)  # Uncomment for debugging
 
                 equalized = cv2.equalizeHist(equalized2)
-                # cv2.imshow("Equalized", equalized)  # Uncomment for debugging
+                cv2.imshow("Equalized", equalized)  # Uncomment for debugging
 
                 thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 4)
-                # cv2.imshow("Threshold", thresh)  # Uncomment for debugging
+                cv2.imshow("Threshold", thresh)  # Uncomment for debugging
 
                 contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
                 detected_hexagons = detect_shapes(contours, self.epsilon_value)
                 hexagons_last_centers = []
-
-                if region not in self.region_last_check_times:
-                    self.region_last_check_times[region] = datetime.now()
-                if region not in self.region_last_detected_times:
-                    self.region_last_detected_times[region] = datetime.now()
-                if region not in self.region_last_alarm_times:
-                    self.region_last_alarm_times[region] = datetime.now()
-                if region not in self.region_hexagon_positions:
-                    self.region_hexagon_positions[region] = []
 
                 for hexagon in detected_hexagons:
                     M = cv2.moments(hexagon)
