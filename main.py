@@ -737,6 +737,9 @@ class VideoWindow(QWidget):
         self.video_thread = VideoThread()
         self.video_thread.change_pixmap_signal.connect(self.update_frame)
 
+        self.wind_speed_thread = threading.Thread(target=update_wind_speed, daemon=True)
+        self.wind_speed_thread.start()
+
     def open_settings(self):
         """Opens the settings window."""
         self.settings_window = SettingsWindow(self)
@@ -934,7 +937,7 @@ class VideoWindow(QWidget):
         elapsed = self.timer.elapsed()
         if elapsed >= self.elapsed_thresh:
 
-            self.wind_speed_label.setText(f"Wind Speed: {wind_speed}")
+            self.wind_speed_label.setText(f"Wind Speed: {wind_speed} km/h")
 
             if not self.is_started:
                 return
