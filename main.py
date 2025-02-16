@@ -669,7 +669,7 @@ class VideoWindow(QWidget):
         self.wind_status("white")
 
         self.wind_speed_label = QLabel(f"Wind Speed: {wind_speed} km/h", self)
-        self.wind_speed_label.setGeometry(1400, 585, 130, 80)
+        self.wind_speed_label.setGeometry(1400, 585, 150, 80)
 
         self.state = "init"
         self.flag_for_find_true_hexagons = 0
