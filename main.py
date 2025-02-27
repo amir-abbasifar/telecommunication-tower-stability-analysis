@@ -56,7 +56,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 # Debug Mode
-debug = True
+debug = False
 
 # Global variables
 wind_speed = 0
@@ -410,7 +410,7 @@ class CameraConnector(threading.Thread):
     """Thread to handle camera connection and initialization."""
     def __init__(self, camera_url):
         super().__init__()
-        self.camera_url = camera_url  # URL دوربین
+        self.camera_url = camera_url
         self.cam = None
         self.cam_width = None
         self.cam_height = None
