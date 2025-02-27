@@ -12,6 +12,8 @@ Company: Nader Niroo Gharb Razi
 
 This project focuses on the stability analysis of telecommunication towers to identify structural issues and potential instabilities. Utilizing computer vision and integrating various sensors, this system aims to provide a comprehensive assessment of tower conditions.
 
+![architecture](https://github.com/amir-abbasifar/telecommunication-tower-stability-analysis/blob/main/Application%20architecture.png)
+
 ## Project Stages
 
 ### 1. Problem Analysis and Objectives
@@ -42,6 +44,8 @@ This project focuses on the stability analysis of telecommunication towers to id
 ## Output
 
 The outcome is a sophisticated software and hardware system capable of analyzing both visual and sensor data to detect potential structural problems and instabilities in telecommunication towers. The system aims to improve the safety and reliability of telecommunication infrastructure significantly.
+
+![output](https://github.com/amir-abbasifar/telecommunication-tower-stability-analysis/blob/main/Logs/2025-01-26/Pics/(Wind)Screenshot%202025-01-26%20152150.png)
 
 ## Installation and Running the Application
 
